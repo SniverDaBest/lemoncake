@@ -1,0 +1,21 @@
+[package]
+name = "lemoncake"
+version = "0.1.0"
+edition = "2024"
+
+[lib]
+crate-type = ["staticlib"]
+
+[dependencies]
+lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
+linked_list_allocator = "0.10.5"
+multiboot2 = "0.23.1"
+spin = "0.9.8"
+volatile = "0.2.6"
+x86_64 = "0.15.2"
+
+[profile.dev]
+panic = "abort"
+
+[profile.release]
+panic = "abort"

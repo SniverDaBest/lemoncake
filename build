@@ -1,0 +1,86 @@
+#!/bin/bash
+
+set -e
+
+cat << 'EOF'
+ _                                         _
+| |    ___ _ __ ___   ___  _ __   __ _  __| | ___
+| |   / _ \ '_ ` _ \ / _ \| '_ \ / _` |/ _` |/ _ \
+| |__|  __| | | | | | (_) | | | | (_| | (_| |  __/
+|_____\___|_| |_| |_|\___/|_| |_|\__,_|\__,_|\___|
+
+
+EOF
+
+if [ "$#" -lt 1 ]; then
+    echo "Usage: $0 {run|build|clean|help}"
+    exit 1
+fi
+
+function build() {
+    mkdir -p bin
+
+    if [ src/asm/boot.asm -nt bin/boot.o ]; then
+        nasm -felf64 src/asm/boot.asm -o bin/boot.o
+    fi
+
+    cargo build
+
+    nb=$(md5sum target/x86_64-lemoncake/debug/liblemoncake.a | awk '{print $1}')
+    pb=$(md5sum bin/liblemoncake.a | awk '{print $1}')
+
+    if [ "$nb" = "$pb" ]; then
+        echo "Rust code already up-to-date."
+    else
+        cp target/x86_64-lemoncake/debug/liblemoncake.a bin/liblemoncake.a
+    fi
+
+    if [ bin/boot.o -nt bin/kernel.bin ] || [ bin/liblemoncake.a -nt bin/kernel.bin ] || [ build -nt newos.iso ]; then
+        ld -n -o bin/kernel.bin -Tlinker.ld bin/boot.o bin/liblemoncake.a
+        mkdir -p bin/iso/boot/grub
+
+        # Copy GRUB config and kernel
+        cp grub.cfg bin/iso/boot/grub/
+        cp bin/kernel.bin bin/iso/boot/
+
+        grub2-mkrescue -o newos.iso bin/iso
+    fi
+}
+
+function run() {
+    build
+    qemu-system-x86_64 -m 128M -cdrom newos.iso 
+}
+
+function clean() {
+    rm -rf bin/ target/ *.iso
+}
+
+case "$1" in
+    run)
+        run
+        ;;
+
+    build)
+        build
+        ;;
+    
+    clean)
+        clean
+        ;;
+        
+    help)
+        echo "Usage: $0 {run|build|clean|help}"
+        echo "  run   - Run Lemonade"
+        echo "  build - Build Lemonade"
+        echo "  clean - Clean the workspace"
+        echo "  help  - Display this message"
+        ;;
+        
+    *)
+        echo "Error: Invalid argument '$1'"
+        echo "Usage: $0 {run|build|help}"
+        exit 1
+        ;;
+        
+esac
