@@ -15,3 +15,6 @@ To build, you will need the following:
 - cargo
 - xorriso
 <!-- END OF LIST><!-->
+
+# License
+Lemoncake uses the BSD 2-clause (simplified) license. Check `LICENSE` for the full license.
