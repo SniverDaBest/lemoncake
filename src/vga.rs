@@ -2,6 +2,7 @@ use core::fmt::{self, Debug};
 use lazy_static::lazy_static;
 use spin::Mutex;
 use volatile::Volatile;
+use crate::print;
 
 lazy_static! {
     /// A global `Writer` instance that can be used for printing to the VGA text buffer.
@@ -178,7 +179,7 @@ macro_rules! print {
 #[macro_export]
 macro_rules! println {
     () => ($crate::vga::print!("\n"));
-    ($($arg:tt)*) => (print!("{}\n", format_args!($($arg)*)));
+    ($($arg:tt)*) => ($crate::print!("{}\n", format_args!($($arg)*)));
 }
 
 /// Prints the given formatted string to the VGA text buffer

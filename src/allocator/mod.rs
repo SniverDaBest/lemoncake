@@ -1,5 +1,5 @@
 use alloc::alloc::{GlobalAlloc, Layout};
-use fixed_size_block::FixedSizeBlockAllocator;
+use bump::BumpAllocator;
 use core::ptr::null_mut;
 use x86_64::{
     VirtAddr,
@@ -9,29 +9,43 @@ use x86_64::{
     }, registers::control::Cr3,
 };
 use multiboot2::MemoryArea;
+use crate::println;
 
 pub mod bump;
 pub mod fixed_size_block;
 pub mod linked_list;
 
-pub const HEAP_START: usize = 0x_4444_4444_0000;
-pub const HEAP_SIZE: usize = 100 * 1024; // 100 KiB
+// Make sure the heap address is low and canonical.
+pub const HEAP_START: usize = 0x_4206_9420; // Adjust to a value that's within your mapped region
+pub const STARTING_HEAP_SIZE: usize = 100*1024*1024; // 100 MiB
 
 #[global_allocator]
-static ALLOCATOR: Locked<FixedSizeBlockAllocator> = Locked::new(FixedSizeBlockAllocator::new());
+pub static ALLOCATOR: Locked<BumpAllocator> = Locked::new(BumpAllocator::new());
 
 pub fn init_heap(
     mapper: &mut impl Mapper<Size4KiB>,
     frame_allocator: &mut impl FrameAllocator<Size4KiB>,
+    memory_areas: &[MemoryArea]
 ) -> Result<(), MapToError<Size4KiB>> {
+    let num_pages = STARTING_HEAP_SIZE / 4096;
+    
+    let mut available_frames = 0;
+    for area in memory_areas.iter().filter(|area| area.typ() == multiboot2::MemoryAreaType::Available) {
+        available_frames += area.size() as usize / 4096;
+    }
+    
+    if available_frames < num_pages {
+        panic!("More pages than available frames!");
+    }
+
     let page_range = {
         let heap_start = VirtAddr::new(HEAP_START as u64);
-        let heap_end = heap_start + HEAP_SIZE as u64 - 1u64;
+        let heap_end = heap_start + STARTING_HEAP_SIZE as u64 - 1u64;
         let heap_start_page = Page::containing_address(heap_start);
         let heap_end_page = Page::containing_address(heap_end);
         Page::range_inclusive(heap_start_page, heap_end_page)
     };
-
+    
     for page in page_range {
         let frame = frame_allocator
             .allocate_frame()
@@ -39,10 +53,10 @@ pub fn init_heap(
         let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
         unsafe { mapper.map_to(page, frame, flags, frame_allocator)?.flush() };
     }
-
+    
     unsafe {
-        ALLOCATOR.lock().init(HEAP_START, HEAP_SIZE);
-    }
+        ALLOCATOR.lock().init(HEAP_START, STARTING_HEAP_SIZE);
+    }    
 
     Ok(())
 }
@@ -97,17 +111,17 @@ pub unsafe fn init_mapper(physical_memory_offset: VirtAddr) -> OffsetPageTable<'
 }
 
 /// A frame allocator that returns usable frames from the multiboot2 memory map.
-pub struct BootInfoFrameAllocator {
-    memory_areas: &'static [MemoryArea],
+pub struct BootInfoFrameAllocator<'a> {
+    memory_areas: &'a [MemoryArea],
     next: usize,
 }
 
-impl BootInfoFrameAllocator {
+impl<'a> BootInfoFrameAllocator<'a> {
     /// Create a frame allocator from the passed memory map.
     ///
     /// # Safety
     /// The caller must guarantee that the passed memory map is valid.
-    pub unsafe fn init(memory_areas: &'static [MemoryArea]) -> Self {
+    pub unsafe fn init(memory_areas: &'a [MemoryArea]) -> Self {
         BootInfoFrameAllocator {
             memory_areas,
             next: 0,
@@ -127,7 +141,7 @@ impl BootInfoFrameAllocator {
     }
 }
 
-unsafe impl FrameAllocator<Size4KiB> for BootInfoFrameAllocator {
+unsafe impl FrameAllocator<Size4KiB> for BootInfoFrameAllocator<'static> {
     fn allocate_frame(&mut self) -> Option<PhysFrame> {
         let frame = self.usable_frames().nth(self.next);
         self.next += 1;
