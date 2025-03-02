@@ -43,7 +43,7 @@ function build() {
         cp grub.cfg bin/iso/boot/grub/
         cp bin/kernel.bin bin/iso/boot/
 
-        grub2-mkrescue -o lemoncake.iso bin/iso --modules="terminal"
+        grub2-mkrescue -o lemoncake.iso bin/iso
     fi
 }
 
@@ -53,7 +53,7 @@ function run() {
         echo "Creating hard drive image..."
         qemu-img create hd.img 128M
     fi
-    qemu-system-x86_64 -bios /usr/share/OVMF/OVMF_CODE.fd -cdrom lemoncake.iso hd.img -m 128M --enable-kvm
+    qemu-system-x86_64 -cdrom lemoncake.iso hd.img -m 128M --enable-kvm
 }
 
 function clean() {

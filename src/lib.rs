@@ -9,7 +9,6 @@ pub mod allocator;
 pub mod vga;
 pub mod acpi;
 pub mod fs;
-use core::ffi::{c_char, CStr};
 use core::panic::PanicInfo;
 use core::alloc::Layout;
 use allocator::BootInfoFrameAllocator;
