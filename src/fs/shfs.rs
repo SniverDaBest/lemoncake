@@ -1,4 +1,4 @@
-#[repr(C,packed)]
+#[repr(C, packed)]
 pub struct Header {
     /// The name of the partition SHFS is stored on.\
     /// MUST be [u8; 16]. (16 u8s)
@@ -14,7 +14,7 @@ pub struct Header {
     pub reserved_area_sz: u32,
 }
 
-#[repr(C,packed)]
+#[repr(C, packed)]
 pub struct PieceHeader {
     /// The ID of the piece.\
     /// For example, the 16th piece will be ID 15.\

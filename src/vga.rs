@@ -1,8 +1,8 @@
 use core::fmt::{self, Debug};
+use core::mem;
 use lazy_static::lazy_static;
 use spin::Mutex;
 use volatile::Volatile;
-use crate::print;
 
 lazy_static! {
     /// A global `Writer` instance that can be used for printing to the VGA text buffer.
@@ -10,7 +10,7 @@ lazy_static! {
     /// Used by the `print!` and `println!` macros.
     pub static ref WRITER: Mutex<Writer> = Mutex::new(Writer {
         column_position: 0,
-        color_code: ColorCode::new(Color::Yellow, Color::Black),
+        color_code: ColorCode::new(Color::Green, Color::Black),
         buffer: unsafe { &mut *(0xb8000 as *mut Buffer) },
     });
 }
@@ -45,8 +45,16 @@ struct ColorCode(u8);
 
 impl ColorCode {
     /// Create a new `ColorCode` with the given foreground and background colors.
-    fn new(foreground: Color, background: Color) -> ColorCode {
+    pub fn new(foreground: Color, background: Color) -> ColorCode {
         ColorCode((background as u8) << 4 | (foreground as u8))
+    }
+
+    pub fn foreground(&self) -> Color {
+        unsafe { mem::transmute(self.0 >> 4) }
+    }
+
+    pub fn background(&self) -> Color {
+        unsafe { mem::transmute(self.0 & 0x0F) }
     }
 }
 
@@ -178,7 +186,7 @@ macro_rules! print {
 /// Like the `println!` macro in the standard library, but prints to the VGA text buffer.
 #[macro_export]
 macro_rules! println {
-    () => ($crate::vga::print!("\n"));
+    () => ($crate::print!("\n"));
     ($($arg:tt)*) => ($crate::print!("{}\n", format_args!($($arg)*)));
 }
 
@@ -192,4 +200,25 @@ pub fn _print(args: fmt::Arguments) {
     interrupts::without_interrupts(|| {
         WRITER.lock().write_fmt(args).unwrap();
     });
+}
+
+pub fn change_colors(fg: Color, bg: Color) {
+    WRITER.lock().color_code = ColorCode::new(fg, bg);
+}
+
+pub fn set_bg(color: Color) {
+    let fg = WRITER.lock().color_code.background();
+    WRITER.lock().color_code = ColorCode::new(fg, color);
+}
+
+pub fn set_fg(color: Color) {
+    let bg = WRITER.lock().color_code.foreground();
+    WRITER.lock().color_code = ColorCode::new(color, bg);
+}
+
+/// Returns two colors: foreground, background
+pub fn get_colors() -> [Color; 2] {
+    let fg = WRITER.lock().color_code.foreground();
+    let bg = WRITER.lock().color_code.background();
+    [fg, bg]
 }

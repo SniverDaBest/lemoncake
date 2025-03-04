@@ -3,7 +3,9 @@ Lemoncake is a small OS, that was originally called `lemonade`. However, I have 
 \
 It's written in Rust, with a teeny-tiny bit of assembly for booting, and other languages like C or C++ may be added in the future.\
 It boots off of `GRUB2`, and doesn't support anything else... *yet*.\
-It also needs `nasm` to build the assembly. I *may* implement support for `GAS` (`as`) in the future.
+It also needs `nasm` or `GAS` *(also known as `as`)* to build the assembly.\
+\
+[![](https://tokei.rs/b1/github/SniverDaBest/lemoncake)](https://github.com/SniverDaBest/lemoncake)
 
 # Dependencies
 To build, you should probably use the `build` file in the root dir. It's a bash script, which will build, link, and do everything else for you.\

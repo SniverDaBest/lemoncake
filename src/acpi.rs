@@ -1,7 +1,7 @@
-use core::fmt::{self, Formatter, Display};
 use crate::vga;
-use multiboot2::{BootInformation, RsdpV1Tag, RsdpV2Tag};
 use alloc::vec::*;
+use core::fmt::{self, Display, Formatter};
+use multiboot2::{BootInformation, RsdpV1Tag, RsdpV2Tag};
 
 pub struct RSDP {
     v1: Option<RsdpV1Tag>,
@@ -30,7 +30,8 @@ impl RSDP {
     pub fn is_checksum_valid(&self) -> bool {
         if self.v2.is_some() {
             self.v2.unwrap().checksum_is_valid()
-        } else { // we don't need to check if there is no rsdp; we already checked.
+        } else {
+            // we don't need to check if there is no rsdp; we already checked.
             self.v1.unwrap().checksum_is_valid()
         }
     }
@@ -48,7 +49,8 @@ impl RSDP {
     pub fn get_revision(&self) -> u8 {
         if self.v2.is_some() {
             self.v2.unwrap().revision()
-        } else { // we don't need to check if there is no rsdp; we already checked.
+        } else {
+            // we don't need to check if there is no rsdp; we already checked.
             self.v1.unwrap().revision()
         }
     }
@@ -73,9 +75,9 @@ impl RSDP {
     }
 
     /// This is ONLY XSDP (v2)! Not RSDP (v1).
-    pub fn get_ext_checksum(&self) -> Result<u8, &str>{
+    pub fn get_ext_checksum(&self) -> Result<u8, &str> {
         if self.v2.is_none() {
-            return Err("You're using RSDP, not XSDP!")
+            return Err("You're using RSDP, not XSDP!");
         } else {
             Ok(self.v2.unwrap().ext_checksum())
         }
@@ -84,7 +86,17 @@ impl RSDP {
 
 impl Display for RSDP {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
-        write!(f, "Is XSDP: {} | OEM ID: {} | Revision: {} | RSDT Address: {:#X?} | Signature: {} | Is Checksum Valid: {} | Extended Checksum: {:?}", self.v2.is_some(), self.get_oem_id(), self.get_revision(), self.get_rsdt_addr(), self.get_signature(), self.is_checksum_valid(), self.get_ext_checksum())
+        write!(
+            f,
+            "Is XSDP: {} | OEM ID: {} | Revision: {} | RSDT Address: {:#X?} | Signature: {} | Is Checksum Valid: {} | Extended Checksum: {:?}",
+            self.v2.is_some(),
+            self.get_oem_id(),
+            self.get_revision(),
+            self.get_rsdt_addr(),
+            self.get_signature(),
+            self.is_checksum_valid(),
+            self.get_ext_checksum()
+        )
     }
 }
 

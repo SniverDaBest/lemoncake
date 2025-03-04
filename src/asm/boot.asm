@@ -59,6 +59,8 @@ start:
     mov ss, ax
     mov ds, ax
     mov es, ax
+    mov gs, ax
+    mov fs, ax
 
     jmp gdt64.code:startos
 
@@ -83,7 +85,6 @@ startos:
     mov rsi, [start.mb2_magic]
     mov rdi, [start.mb2_info]
     call kernel_main
-
 
 section .bss
 align 4096

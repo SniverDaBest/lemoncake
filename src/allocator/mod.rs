@@ -1,15 +1,16 @@
+use crate::println;
 use alloc::alloc::{GlobalAlloc, Layout};
 use bump::BumpAllocator;
 use core::ptr::null_mut;
-use x86_64::{
-    VirtAddr,
-    PhysAddr,
-    structures::paging::{
-        FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB, mapper::MapToError, OffsetPageTable, PageTable, PhysFrame
-    }, registers::control::Cr3,
-};
 use multiboot2::MemoryArea;
-use crate::println;
+use x86_64::{
+    PhysAddr, VirtAddr,
+    registers::control::Cr3,
+    structures::paging::{
+        FrameAllocator, Mapper, OffsetPageTable, Page, PageTable, PageTableFlags, PhysFrame,
+        Size4KiB, mapper::MapToError,
+    },
+};
 
 pub mod bump;
 pub mod fixed_size_block;
@@ -17,7 +18,7 @@ pub mod linked_list;
 
 // Make sure the heap address is low and canonical.
 pub const HEAP_START: usize = 0x_4206_9420; // Adjust to a value that's within your mapped region
-pub const STARTING_HEAP_SIZE: usize = 100*1024*1024; // 100 MiB
+pub const STARTING_HEAP_SIZE: usize = 100 * 1024 * 1024; // 100 MiB
 
 #[global_allocator]
 pub static ALLOCATOR: Locked<BumpAllocator> = Locked::new(BumpAllocator::new());
@@ -25,15 +26,18 @@ pub static ALLOCATOR: Locked<BumpAllocator> = Locked::new(BumpAllocator::new());
 pub fn init_heap(
     mapper: &mut impl Mapper<Size4KiB>,
     frame_allocator: &mut impl FrameAllocator<Size4KiB>,
-    memory_areas: &[MemoryArea]
+    memory_areas: &[MemoryArea],
 ) -> Result<(), MapToError<Size4KiB>> {
     let num_pages = STARTING_HEAP_SIZE / 4096;
-    
+
     let mut available_frames = 0;
-    for area in memory_areas.iter().filter(|area| area.typ() == multiboot2::MemoryAreaType::Available) {
+    for area in memory_areas
+        .iter()
+        .filter(|area| area.typ() == multiboot2::MemoryAreaType::Available)
+    {
         available_frames += area.size() as usize / 4096;
     }
-    
+
     if available_frames < num_pages {
         panic!("More pages than available frames!");
     }
@@ -45,7 +49,7 @@ pub fn init_heap(
         let heap_end_page = Page::containing_address(heap_end);
         Page::range_inclusive(heap_start_page, heap_end_page)
     };
-    
+
     for page in page_range {
         let frame = frame_allocator
             .allocate_frame()
@@ -53,10 +57,10 @@ pub fn init_heap(
         let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
         unsafe { mapper.map_to(page, frame, flags, frame_allocator)?.flush() };
     }
-    
+
     unsafe {
         ALLOCATOR.lock().init(HEAP_START, STARTING_HEAP_SIZE);
-    }    
+    }
 
     Ok(())
 }
@@ -130,13 +134,21 @@ impl<'a> BootInfoFrameAllocator<'a> {
 
     /// Returns an iterator over usable physical frames.
     fn usable_frames(&self) -> impl Iterator<Item = PhysFrame<Size4KiB>> {
-        self.memory_areas.iter().filter(|area| area.typ() == multiboot2::MemoryAreaType::Available)
+        self.memory_areas
+            .iter()
+            .filter(|area| area.typ() == multiboot2::MemoryAreaType::Available)
             .flat_map(|area| {
-                let start_frame: PhysFrame<Size4KiB> = PhysFrame::containing_address(PhysAddr::new(area.start_address()));
+                let start_frame: PhysFrame<Size4KiB> =
+                    PhysFrame::containing_address(PhysAddr::new(area.start_address()));
                 // Note: area.length might not be an exact multiple of 4096, so you may want to adjust.
-                let end_frame: PhysFrame<Size4KiB> = PhysFrame::containing_address(PhysAddr::new(area.start_address() + area.size()));
-                (start_frame.start_address().as_u64()/4096..end_frame.start_address().as_u64()/4096)
-                    .map(|frame_number| PhysFrame::from_start_address(PhysAddr::new(frame_number * 4096)).unwrap())
+                let end_frame: PhysFrame<Size4KiB> = PhysFrame::containing_address(PhysAddr::new(
+                    area.start_address() + area.size(),
+                ));
+                (start_frame.start_address().as_u64() / 4096
+                    ..end_frame.start_address().as_u64() / 4096)
+                    .map(|frame_number| {
+                        PhysFrame::from_start_address(PhysAddr::new(frame_number * 4096)).unwrap()
+                    })
             })
     }
 }
