@@ -15,25 +15,32 @@ pub mod executor;
 pub mod fs;
 pub mod interrupts;
 pub mod keyboard;
+pub mod disks;
 use allocator::BootInfoFrameAllocator;
 use core::alloc::Layout;
 use core::arch::asm;
-use core::mem;
 use core::panic::PanicInfo;
 use executor::{Executor, Task};
-use multiboot2::{BootInformation, BootInformationHeader, FramebufferTag};
-use vga::{Color, get_colors, set_fg};
+use multiboot2::{BootInformation, BootInformationHeader};
 use x86_64::VirtAddr;
 pub const PHYSICAL_MEMORY_OFFSET: VirtAddr = VirtAddr::new(0x0);
 pub const LEMONCAKE_VER: &str = "25m3";
 
 #[unsafe(no_mangle)]
 pub extern "C" fn kernel_main(mbi: u32, magic: u32) -> ! {
-    println!("Running Lemoncake {}", LEMONCAKE_VER);
-    warning!("If you touch a key, it will screw up the entire system!");
+    info!("Running Lemoncake {}", LEMONCAKE_VER);
     if magic != multiboot2::MAGIC {
-        panic!("magic given was NOT the correct magic!");
+        panic!("MB2 magic given was NOT the correct magic! Expected {:#X?}, but got {:#X?}!", multiboot2::MAGIC, magic);
     }
+
+    info!("Setting up IDT, PICS, and interrupts...");
+    interrupts::init_idt();
+    unsafe { interrupts::PICS.lock().initialize() };
+
+    if !x86_64::instructions::interrupts::are_enabled() {
+        x86_64::instructions::interrupts::enable();
+    }
+
     let boot_info = unsafe { BootInformation::load(mbi as *const BootInformationHeader) }
         .expect("Unable to get MB2 boot info!");
     let boot_info: &'static BootInformation = unsafe { &*(&boot_info as *const _) };
@@ -52,30 +59,21 @@ pub extern "C" fn kernel_main(mbi: u32, magic: u32) -> ! {
     }
     let mut frame_allocator = unsafe { BootInfoFrameAllocator::init(memory_areas) };
     let mut mapper = unsafe { allocator::init_mapper(PHYSICAL_MEMORY_OFFSET) };
-    println!("Initializing heap... This may take a while!");
+    info!("Initializing heap... This may take a while!");
     allocator::init_heap(&mut mapper, &mut frame_allocator, memory_areas)
         .expect("Heap initialization failed");
 
-    println!("Done! Setting up IDT, PICS, and interrupts...");
-    interrupts::init_idt();
-    unsafe { interrupts::PICS.lock().initialize() };
-
-    if !x86_64::instructions::interrupts::are_enabled() {
-        x86_64::instructions::interrupts::enable();
-    }
-
-    println!("All done!");
+    info!("All done!");
 
     let mut executor = Executor::new();
     executor.spawn(Task::new(command_line::run_command_line()));
     executor.run();
-
-    loop {}
 }
 
 #[panic_handler]
 fn panic_handler(_info: &PanicInfo) -> ! {
-    error!(
+    crate::vga::set_fg(crate::vga::Color::Red);
+    println!(
         "(X_X)\n\nUh-oh! Lemoncake panicked. This usually means that something super bad happened.\n\nMessage: {}\nLocation: {}",
         _info.message(),
         _info.location().unwrap()
@@ -86,7 +84,8 @@ fn panic_handler(_info: &PanicInfo) -> ! {
 
 #[alloc_error_handler]
 fn alloc_error_handler(_layout: Layout) -> ! {
-    error!(
+    crate::vga::set_fg(crate::vga::Color::Red);
+    println!(
         "(X_X)\n\nUh-oh! Lemoncake panicked, as it was unable to allocate {} bytes of memory!\n\nLayout: {:?}",
         _layout.size(),
         _layout
@@ -124,30 +123,30 @@ macro_rules! nftodo {
 #[macro_export]
 macro_rules! error {
     ($($arg:tt)*) => {
-        let prev_fg = get_colors()[1];
-        set_fg(Color::Red);
+        let prev_fg = $crate::vga::get_colors()[1];
+        $crate::vga::set_fg($crate::vga::Color::Red);
         ($crate::println!("(o_0)  Error: {}", format_args!($($arg)*)));
-        set_fg(prev_fg);
+        $crate::vga::set_fg(prev_fg);
     }
 }
 
 #[macro_export]
 macro_rules! warning {
     ($($arg:tt)*) => {
-        let prev_fg = get_colors()[1];
-        set_fg(Color::Yellow);
+        let prev_fg = $crate::vga::get_colors()[1];
+        $crate::vga::set_fg($crate::vga::Color::Yellow);
         ($crate::println!("(o_0)  Warning: {}", format_args!($($arg)*)));
-        set_fg(prev_fg);
+        $crate::vga::set_fg(prev_fg);
     }
 }
 
 #[macro_export]
 macro_rules! info {
     ($($arg:tt)*) => {
-        let prev_fg = get_colors()[1];
-        set_fg(Color::LightBlue);
+        let prev_fg = $crate::vga::get_colors()[1];
+        $crate::vga::set_fg($crate::vga::Color::LightBlue);
         ($crate::println!("(o_o)  Info: {}", format_args!($($arg)*)));
-        set_fg(prev_fg);
+        $crate::vga::set_fg(prev_fg);
     }
 }
 

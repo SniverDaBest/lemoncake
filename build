@@ -87,6 +87,8 @@ function build() {
         else
             cp target/x86_64-lemoncake/release/liblemoncake.a bin/liblemoncake.a
         fi
+
+        # expand as needed
     else
         cargo build
         nb=$(md5sum target/x86_64-lemoncake/debug/liblemoncake.a | awk '{print $1}')
@@ -97,14 +99,14 @@ function build() {
         else
             cp target/x86_64-lemoncake/debug/liblemoncake.a bin/liblemoncake.a
         fi
+
+        # expand as needed
     fi
 
-    # Link kernel and create ISO if necessary
     if [ linker.ld -nt bin/kernel.bin ] || [ bin/boot.o -nt bin/kernel.bin ] || [ bin/liblemoncake.a -nt bin/kernel.bin ] || [ bin/kernel.bin -nt lemoncake.iso ] || [ grub.cfg -nt lemoncake.iso ]; then
-        ld -n -o bin/kernel.bin -T linker.ld bin/boot.o bin/liblemoncake.a
+        ld -n -o bin/kernel.bin -T linker.ld bin/boot.o bin/liblemoncake.a bin/ahci.o
         mkdir -p bin/iso/boot/grub
 
-        # Copy GRUB config and kernel
         cp grub.cfg bin/iso/boot/grub/
         cp bin/kernel.bin bin/iso/boot/
 

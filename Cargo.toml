@@ -16,6 +16,8 @@ volatile = "0.2.6"
 x86_64 = "0.15.2"
 pc-keyboard = "0.8.0"
 conquer-once = { version = "0.4.0", default-features = false }
+bitfield-struct = "0.10.1"
+libc = "0.2.170"
 
 [dependencies.crossbeam-queue]
 version = "0.3.12"

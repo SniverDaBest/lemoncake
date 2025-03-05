@@ -1,7 +1,7 @@
-use crate::{LEMONCAKE_VER, acpi, base64, keyboard, nftodo, print, println, vga::WRITER};
+use crate::{base64, disks, keyboard, nftodo, print, println, warning, vga::{set_fg, set_bg, Color, WRITER}, LEMONCAKE_VER};
 use alloc::{
     string::{String, ToString},
-    vec::Vec,
+    vec::*,
 };
 use futures_util::stream::StreamExt;
 use pc_keyboard::{DecodedKey, Keyboard, ScancodeSet1};
@@ -53,35 +53,88 @@ pub async fn run_command_line() {
 }
 
 fn process_command(command: &str) {
-    if command.trim().contains("echo") {
+    if command.trim().starts_with("echo") {
         println!("{}", command.replace("echo ", ""));
-    } else if command.trim().contains("clear") {
+    } else if command.trim().starts_with("clear") {
         WRITER.lock().clear_screen();
-    } else if command.trim().contains("ver") {
+    } else if command.trim().starts_with("ver") {
         println!(
             "SHSH Version {}\nLemoncake version: {}",
             SHSH_VERSION, LEMONCAKE_VER
         );
-    } else if command.trim().contains("b64encode") {
+    } else if command.trim().starts_with("b64encode") {
         let input_str = command.split_whitespace().nth(1).unwrap_or("").as_bytes();
         println!("{}", base64::encode(input_str));
-    } else if command.trim().contains("b64decode") {
+    } else if command.trim().starts_with("b64decode") {
         let input_str = command.split_whitespace().nth(1).unwrap_or("").as_bytes();
         println!("{}", base64::decode(input_str));
-    } else if command.trim().contains("color") {
+    } else if command.trim().starts_with("color") {
+        let cmds: Vec<&str> = command.trim().split_ascii_whitespace().collect();
+        if cmds.len() < 3 {
+            warning!("Incorrect arguments.");
+            return;
+        }
+
+        let fg: &str = cmds[1];
+        match fg.to_lowercase().as_str() {
+            "red"        => set_fg(Color::Red),
+            "lightred"   => set_fg(Color::LightRed),
+            "yellow"     => set_fg(Color::Yellow),
+            "green"      => set_fg(Color::Green),
+            "lightgreen" => set_fg(Color::LightGreen),
+            "cyan"       => set_fg(Color::Cyan),
+            "lightcyan"  => set_fg(Color::LightCyan),
+            "blue"       => set_fg(Color::Blue),
+            "lightblue"  => set_fg(Color::LightBlue),
+            "magenta"    => set_fg(Color::Magenta),
+            "pink"       => set_fg(Color::Pink),
+            "white"      => set_fg(Color::White),
+            "darkgray"   => set_fg(Color::DarkGray),
+            "lightgray"  => set_fg(Color::LightGray),
+            "brown"      => set_fg(Color::Brown),
+            "black"      => set_fg(Color::Black),
+            c => {
+                warning!("Color {} is not an acceptable value!", c);
+            }
+        }
+
+        let bg: &str = cmds[2];
+        match bg.to_lowercase().as_str() {
+            "red"        => set_bg(Color::Red),
+            "lightred"   => set_bg(Color::LightRed),
+            "yellow"     => set_bg(Color::Yellow),
+            "green"      => set_bg(Color::Green),
+            "lightgreen" => set_bg(Color::LightGreen),
+            "cyan"       => set_bg(Color::Cyan),
+            "lightcyan"  => set_bg(Color::LightCyan),
+            "blue"       => set_bg(Color::Blue),
+            "lightblue"  => set_bg(Color::LightBlue),
+            "magenta"    => set_bg(Color::Magenta),
+            "pink"       => set_bg(Color::Pink),
+            "white"      => set_bg(Color::White),
+            "darkgray"   => set_bg(Color::DarkGray),
+            "lightgray"  => set_bg(Color::LightGray),
+            "brown"      => set_bg(Color::Brown),
+            "black"      => set_bg(Color::Black),
+            c => {
+                warning!("Color {} is not an acceptable value!", c);
+            }
+        }
+    } else if command.trim().starts_with("disks") {
         nftodo!();
-    } else if command.trim().contains("help") {
+    } else if command.trim().starts_with("help") {
         println!("SHSH Version {}.", SHSH_VERSION);
         println!("help -- Shows this message.");
         println!("echo [input] -- Echos user input.");
         println!("clear -- Clears the screen.");
         println!(
-            "ver -- Shows the version of SHSH and Lemonade. (currently running version {})",
+            "ver -- Shows the version of SHSH and Lemoncake. (currently running SHSH {})",
             SHSH_VERSION
         );
-        println!("color -- Changes the color");
+        println!("color [fg, bg] -- Changes the color");
         println!("b64encode [input] -- Encodes user input into Base64");
         println!("b64decode [base64] -- Decodes Base64 user input into normal text.");
+        println!("disks -- The disk utility.");
     } else if command.trim() == "" {
         println!();
     } else {

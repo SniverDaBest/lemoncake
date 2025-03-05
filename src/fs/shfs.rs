@@ -28,3 +28,17 @@ pub struct PieceHeader {
     /// If the file cuts through the entire piece, then the header will be put into the reserved area.
     pub file_cut_sz: u32,
 }
+
+impl Header {
+    pub fn new(name: [u8; 16], piece_sz: u32, piece_count: u16) -> Self {
+        Self {
+            name, piece_sz, piece_count, used_piece_count: 0, reserved_area_sz: 5*(piece_count+4) as u32
+        }
+    }
+}
+
+impl PieceHeader {
+    pub fn new(piece_id: u16, next_piece: u16) -> Self {
+        Self { piece_id, next_piece, file_cut_sz: 0 }
+    }
+}
