@@ -1,4 +1,4 @@
-use crate::{base64, disks, keyboard, nftodo, print, println, warning, vga::{set_fg, set_bg, Color, WRITER}, LEMONCAKE_VER};
+use crate::{base64, disks::{self, ahci}, error, info, keyboard, nftodo, pci::{self, scan_pci_bus}, print, println, vga::{set_bg, set_fg, Color, WRITER}, warning, LEMONCAKE_VER};
 use alloc::{
     string::{String, ToString},
     vec::*,
@@ -54,7 +54,7 @@ pub async fn run_command_line() {
 
 fn process_command(command: &str) {
     if command.trim().starts_with("echo") {
-        println!("{}", command.replace("echo ", ""));
+        println!("{}", command.replace("echo ", "").as_str().trim());
     } else if command.trim().starts_with("clear") {
         WRITER.lock().clear_screen();
     } else if command.trim().starts_with("ver") {
@@ -71,7 +71,8 @@ fn process_command(command: &str) {
     } else if command.trim().starts_with("color") {
         let cmds: Vec<&str> = command.trim().split_ascii_whitespace().collect();
         if cmds.len() < 3 {
-            warning!("Incorrect arguments.");
+            println!("Usage:");
+            println!("  [foreground color] [background color]");
             return;
         }
 
@@ -121,7 +122,38 @@ fn process_command(command: &str) {
             }
         }
     } else if command.trim().starts_with("disks") {
-        nftodo!();
+        let devs = ahci::scan_for_ahci_devs();
+        for dev in devs {
+            info!("Found AHCI Device: {}", dev);
+        }
+    } else if command.trim().starts_with("pci") {
+        let cmds: Vec<&str> = command.trim().split_ascii_whitespace().collect();
+        if cmds.len() < 2 {
+            println!("Usage:");
+            println!("  -h -- Shows this message");
+            println!("  -s -- Searches for all PCI devices.");
+            return;
+        }
+
+        if cmds[1] == "-s" {
+            let pci_devs = unsafe { scan_pci_bus() };
+            for dev in pci_devs {
+                info!("Got PCI Device: {}", dev);
+            }
+
+        } else if cmds[1] == "-h" {
+            println!("Usage:");
+            println!("  -h -- Shows this message");
+            println!("  -s -- Searches for all PCI devices.");
+        }
+    } else if command.trim().starts_with("error") {
+        error!("{}", command.replace("error", "").as_str().trim());
+    } else if command.trim().starts_with("warning") {
+        warning!("{}", command.replace("warning", "").as_str().trim());
+    } else if command.trim().starts_with("info") {
+        info!("{}", command.replace("info", "").as_str().trim());
+    } else if command.trim().starts_with("panic") {
+        panic!("{}", command.replace("panic", "").as_str().trim());
     } else if command.trim().starts_with("help") {
         println!("SHSH Version {}.", SHSH_VERSION);
         println!("help -- Shows this message.");
@@ -135,6 +167,11 @@ fn process_command(command: &str) {
         println!("b64encode [input] -- Encodes user input into Base64");
         println!("b64decode [base64] -- Decodes Base64 user input into normal text.");
         println!("disks -- The disk utility.");
+        println!("pci -- The PCI utility");
+        println!("error [message] -- prints like an error");
+        println!("warning [message] -- prints like a warning");
+        println!("info [message] -- prints like info");
+        println!("panic [message] -- panics the system\n");
     } else if command.trim() == "" {
         println!();
     } else {

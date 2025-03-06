@@ -120,7 +120,7 @@ function run() {
         echo "Creating hard drive image..."
         qemu-img create hd.img 128M
     fi
-    qemu-system-x86_64 -cdrom lemoncake.iso hd.img -m 128M --enable-kvm
+    qemu-system-x86_64 -cdrom lemoncake.iso -drive id=disk,file=hd.img,if=none,format=raw -device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0 -m 128M --enable-kvm
 }
 
 function clean() {

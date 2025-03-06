@@ -16,15 +16,19 @@ pub mod fs;
 pub mod interrupts;
 pub mod keyboard;
 pub mod disks;
+pub mod pci;
+use alloc::string::*;
 use allocator::BootInfoFrameAllocator;
 use core::alloc::Layout;
-use core::arch::asm;
 use core::panic::PanicInfo;
 use executor::{Executor, Task};
 use multiboot2::{BootInformation, BootInformationHeader};
-use x86_64::VirtAddr;
+use x86_64::{VirtAddr, instructions::port::{Port, PortRead}};
 pub const PHYSICAL_MEMORY_OFFSET: VirtAddr = VirtAddr::new(0x0);
 pub const LEMONCAKE_VER: &str = "25m3";
+
+#[cfg(not(target_arch = "x86_64"))]
+compile_error!("This OS only supports x86_64!");
 
 #[unsafe(no_mangle)]
 pub extern "C" fn kernel_main(mbi: u32, magic: u32) -> ! {
@@ -36,10 +40,7 @@ pub extern "C" fn kernel_main(mbi: u32, magic: u32) -> ! {
     info!("Setting up IDT, PICS, and interrupts...");
     interrupts::init_idt();
     unsafe { interrupts::PICS.lock().initialize() };
-
-    if !x86_64::instructions::interrupts::are_enabled() {
-        x86_64::instructions::interrupts::enable();
-    }
+    x86_64::instructions::interrupts::enable();
 
     let boot_info = unsafe { BootInformation::load(mbi as *const BootInformationHeader) }
         .expect("Unable to get MB2 boot info!");
@@ -71,43 +72,67 @@ pub extern "C" fn kernel_main(mbi: u32, magic: u32) -> ! {
 }
 
 #[panic_handler]
-fn panic_handler(_info: &PanicInfo) -> ! {
+fn panic_handler(info: &PanicInfo) -> ! {
     crate::vga::set_fg(crate::vga::Color::Red);
+
     println!(
         "(X_X)\n\nUh-oh! Lemoncake panicked. This usually means that something super bad happened.\n\nMessage: {}\nLocation: {}",
-        _info.message(),
-        _info.location().unwrap()
+        info.message(),
+        info.location().unwrap()
     );
 
     loop {}
 }
 
 #[alloc_error_handler]
-fn alloc_error_handler(_layout: Layout) -> ! {
+fn alloc_error_handler(layout: Layout) -> ! {
     crate::vga::set_fg(crate::vga::Color::Red);
     println!(
         "(X_X)\n\nUh-oh! Lemoncake panicked, as it was unable to allocate {} bytes of memory!\n\nLayout: {:?}",
-        _layout.size(),
-        _layout
+        layout.size(),
+        layout
     );
 
     loop {}
 }
 
+pub fn bool_to_yn(var: bool) -> String {
+    match var {
+        true => "yes".to_string(),
+        false => "no".to_string(),
+    }
+}
+
+pub unsafe fn read_from_port<T: PortRead>(port: u16) -> T {
+    let mut p: Port<T> = Port::new(port);
+    unsafe { return p.read(); }
+}
+
+pub unsafe fn write_to_port(port: u16, data: u32) {
+    let mut p: Port<u32> = Port::new(port);
+    unsafe { p.write(data); }
+}
+
 /// Writes an 8-bit value to the specified I/O port.
 pub unsafe fn outb(port: u16, value: u8) {
-    unsafe {
-        asm!("out dx, al", in("dx") port, in("al") value);
-    }
+    unsafe { write_to_port(port, value as u32); }
 }
 
 /// Reads an 8-bit value from the specified I/O port.
 pub unsafe fn inb(port: u16) -> u8 {
-    let value: u8;
-    unsafe {
-        asm!("in al, dx", out("al") value, in("dx") port);
-    }
-    value
+    unsafe { return read_from_port(port); }
+}
+
+/// Reads a 32-bit value from the specified I/O port.
+#[inline]
+pub unsafe fn inl(port: u16) -> u32 {
+    unsafe { return read_from_port(port); }
+}
+
+/// Writes a 32-bit value to the specified I/O port.
+#[inline]
+pub unsafe fn outl(port: u16, val: u32) {
+    unsafe { write_to_port(port, val); }
 }
 
 #[macro_export]

@@ -7,6 +7,9 @@ It also needs `nasm` or `GAS` *(also known as `as`)* to build the assembly.\
 \
 [![](https://tokei.rs/b1/github/SniverDaBest/lemoncake)](https://github.com/SniverDaBest/lemoncake)
 
+>[!WARNING]
+> If you're having issues with running QEMU, try removing the `--enable-kvm` flag from the command in the build script.
+
 # Dependencies
 To build, you should probably use the `build` file in the root dir. It's a bash script, which will build, link, and do everything else for you.\
 \
@@ -16,6 +19,7 @@ To build, you will need the following:
     - probably some modules for it but idk which ones
 - cargo
 - xorriso
+- qemu
 <!-- END OF LIST><!-->
 
 # License

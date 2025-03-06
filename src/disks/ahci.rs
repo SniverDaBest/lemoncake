@@ -1,8 +1,8 @@
-use core::{mem::transmute, ptr};
-
-use crate::{error, warning};
+use core::{fmt::{self, Display, Formatter}, ptr};
+use crate::{bool_to_yn, error, info, pci::{scan_pci_bus, PCIDevice}, warning};
 
 use super::*;
+use alloc::vec::Vec;
 use bitfield_struct::bitfield;
 
 #[repr(C)]
@@ -502,4 +502,37 @@ pub unsafe fn read(
         return false;
     }
     true
+}
+
+pub struct AHCIDevice {
+    pub pci_device: PCIDevice,
+    pub is_mounted: bool
+}
+
+impl AHCIDevice {
+    pub fn new(pci_device: PCIDevice) -> Self {
+        Self { pci_device, is_mounted: false }
+    }
+}
+
+impl Display for AHCIDevice {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        let m = bool_to_yn(self.is_mounted);
+        write!(f, "PCI Device: {{ {} }} | Is Mounted: {}", self.pci_device, m)
+    }
+}
+
+/// Checks for AHCI devices connected by PCI
+pub fn scan_for_ahci_devs() -> Vec<AHCIDevice> {
+    let devs = unsafe { scan_pci_bus() };
+    let mut res: Vec<AHCIDevice> = Vec::new();
+
+    for dev in devs {
+        let d: PCIDevice = dev.into();
+        if d.class_id == 0x1 && d.subclass == 0x6 && d.prog_if == 0x1 {
+            res.push(AHCIDevice::new(d));
+        }
+    }
+
+    return res;
 }
