@@ -1,4 +1,12 @@
-use crate::{base64, disks::{self, ahci}, error, info, keyboard, nftodo, pci::{self, scan_pci_bus}, print, println, vga::{set_bg, set_fg, Color, WRITER}, warning, LEMONCAKE_VER};
+use crate::{
+    LEMONCAKE_VER, base64,
+    disks::{self, ahci},
+    error, info, keyboard, nftodo,
+    pci::{self, scan_pci_bus},
+    print, println,
+    vga::{Color, WRITER, set_bg, set_fg},
+    warning,
+};
 use alloc::{
     string::{String, ToString},
     vec::*,
@@ -78,22 +86,22 @@ fn process_command(command: &str) {
 
         let fg: &str = cmds[1];
         match fg.to_lowercase().as_str() {
-            "red"        => set_fg(Color::Red),
-            "lightred"   => set_fg(Color::LightRed),
-            "yellow"     => set_fg(Color::Yellow),
-            "green"      => set_fg(Color::Green),
+            "red" => set_fg(Color::Red),
+            "lightred" => set_fg(Color::LightRed),
+            "yellow" => set_fg(Color::Yellow),
+            "green" => set_fg(Color::Green),
             "lightgreen" => set_fg(Color::LightGreen),
-            "cyan"       => set_fg(Color::Cyan),
-            "lightcyan"  => set_fg(Color::LightCyan),
-            "blue"       => set_fg(Color::Blue),
-            "lightblue"  => set_fg(Color::LightBlue),
-            "magenta"    => set_fg(Color::Magenta),
-            "pink"       => set_fg(Color::Pink),
-            "white"      => set_fg(Color::White),
-            "darkgray"   => set_fg(Color::DarkGray),
-            "lightgray"  => set_fg(Color::LightGray),
-            "brown"      => set_fg(Color::Brown),
-            "black"      => set_fg(Color::Black),
+            "cyan" => set_fg(Color::Cyan),
+            "lightcyan" => set_fg(Color::LightCyan),
+            "blue" => set_fg(Color::Blue),
+            "lightblue" => set_fg(Color::LightBlue),
+            "magenta" => set_fg(Color::Magenta),
+            "pink" => set_fg(Color::Pink),
+            "white" => set_fg(Color::White),
+            "darkgray" => set_fg(Color::DarkGray),
+            "lightgray" => set_fg(Color::LightGray),
+            "brown" => set_fg(Color::Brown),
+            "black" => set_fg(Color::Black),
             c => {
                 warning!("Color {} is not an acceptable value!", c);
             }
@@ -101,22 +109,22 @@ fn process_command(command: &str) {
 
         let bg: &str = cmds[2];
         match bg.to_lowercase().as_str() {
-            "red"        => set_bg(Color::Red),
-            "lightred"   => set_bg(Color::LightRed),
-            "yellow"     => set_bg(Color::Yellow),
-            "green"      => set_bg(Color::Green),
+            "red" => set_bg(Color::Red),
+            "lightred" => set_bg(Color::LightRed),
+            "yellow" => set_bg(Color::Yellow),
+            "green" => set_bg(Color::Green),
             "lightgreen" => set_bg(Color::LightGreen),
-            "cyan"       => set_bg(Color::Cyan),
-            "lightcyan"  => set_bg(Color::LightCyan),
-            "blue"       => set_bg(Color::Blue),
-            "lightblue"  => set_bg(Color::LightBlue),
-            "magenta"    => set_bg(Color::Magenta),
-            "pink"       => set_bg(Color::Pink),
-            "white"      => set_bg(Color::White),
-            "darkgray"   => set_bg(Color::DarkGray),
-            "lightgray"  => set_bg(Color::LightGray),
-            "brown"      => set_bg(Color::Brown),
-            "black"      => set_bg(Color::Black),
+            "cyan" => set_bg(Color::Cyan),
+            "lightcyan" => set_bg(Color::LightCyan),
+            "blue" => set_bg(Color::Blue),
+            "lightblue" => set_bg(Color::LightBlue),
+            "magenta" => set_bg(Color::Magenta),
+            "pink" => set_bg(Color::Pink),
+            "white" => set_bg(Color::White),
+            "darkgray" => set_bg(Color::DarkGray),
+            "lightgray" => set_bg(Color::LightGray),
+            "brown" => set_bg(Color::Brown),
+            "black" => set_bg(Color::Black),
             c => {
                 warning!("Color {} is not an acceptable value!", c);
             }
@@ -140,7 +148,6 @@ fn process_command(command: &str) {
             for dev in pci_devs {
                 info!("Got PCI Device: {}", dev);
             }
-
         } else if cmds[1] == "-h" {
             println!("Usage:");
             println!("  -h -- Shows this message");

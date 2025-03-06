@@ -1,5 +1,12 @@
-use core::{fmt::{self, Display, Formatter}, ptr};
-use crate::{bool_to_yn, error, info, pci::{scan_pci_bus, PCIDevice}, warning};
+use crate::{
+    bool_to_yn, error, info,
+    pci::{PCIDevice, scan_pci_bus},
+    warning,
+};
+use core::{
+    fmt::{self, Display, Formatter},
+    ptr,
+};
 
 use super::*;
 use alloc::vec::Vec;
@@ -7,14 +14,14 @@ use bitfield_struct::bitfield;
 
 #[repr(C)]
 pub enum FISType {
-	FISTypeRegH2D	= 0x27,	// Register FIS - host to device
-	FISTypeRegD2H	= 0x34,	// Register FIS - device to host
-	FISTypeDMAACT	= 0x39,	// DMA activate FIS - device to host
-	FISTypeDMASetup	= 0x41,	// DMA setup FIS - bidirectional
-	FISTypeData		= 0x46,	// Data FIS - bidirectional
-	FisTypeBist		= 0x58,	// BIST activate FIS - bidirectional
-	FISTypePIOSetup	= 0x5F,	// PIO setup FIS - device to host
-	FISTypeDevBits	= 0xA1,	// Set device bits FIS - device to host
+    FISTypeRegH2D = 0x27,   // Register FIS - host to device
+    FISTypeRegD2H = 0x34,   // Register FIS - device to host
+    FISTypeDMAACT = 0x39,   // DMA activate FIS - device to host
+    FISTypeDMASetup = 0x41, // DMA setup FIS - bidirectional
+    FISTypeData = 0x46,     // Data FIS - bidirectional
+    FisTypeBist = 0x58,     // BIST activate FIS - bidirectional
+    FISTypePIOSetup = 0x5F, // PIO setup FIS - device to host
+    FISTypeDevBits = 0xA1,  // Set device bits FIS - device to host
 }
 
 #[bitfield(u8)]
@@ -101,7 +108,6 @@ pub struct FISDMASetup {
     pub TransferCount: u32,
     pub resvd: u32,
 }
-
 
 #[bitfield(u8)]
 pub struct FisDataFlags {
@@ -194,9 +200,9 @@ pub struct HBAMem {
     cap2: u32,
     bohc: u32,
 
-    rsv: [u8; 0xA0-0x2C],
+    rsv: [u8; 0xA0 - 0x2C],
 
-    vendor: [u8; 0x100-0xA0],
+    vendor: [u8; 0x100 - 0xA0],
 
     ports: [HBAPort; 1],
 }
@@ -214,10 +220,10 @@ pub struct HBAFIS {
     pad2: [u8; 4],
 
     sdbfis: FISDevBits,
-    
+
     ufis: [u8; 64],
 
-    rsv: [u8; 0x100-0xA0]
+    rsv: [u8; 0x100 - 0xA0],
 }
 
 #[bitfield(u8)]
@@ -306,7 +312,7 @@ fn check_type(port: &HBAPort) -> u8 {
     if det != HBA_PORT_DET_PRESENT {
         return AHCI_DEV_NULL;
     }
-    
+
     if ipm != HBA_PORT_IPM_ACTIVE {
         return AHCI_DEV_NULL;
     }
@@ -364,14 +370,14 @@ fn stop_cmd(port: &mut HBAPort) {
 
     loop {
         if port.cmd & HBA_PXCMD_FR != 0 {
-            continue
+            continue;
         }
 
         if port.cmd & HBA_PXCMD_CR != 0 {
-            continue
+            continue;
         }
 
-        break
+        break;
     }
 }
 
@@ -380,11 +386,15 @@ pub fn port_rebase(port: &mut HBAPort, n: u32) {
 
     (*port).clb = AHCI_BASE + ((n as usize) << 10) as u32;
     (*port).clbu = 0;
-    unsafe { ptr::write_bytes((*port).clb as *mut u8, 0, 1024); }
+    unsafe {
+        ptr::write_bytes((*port).clb as *mut u8, 0, 1024);
+    }
 
     (*port).fb = AHCI_BASE + (32 << 10) + ((n as usize) << 8) as u32;
-    (*port).fbu = 0;   
-    unsafe { ptr::write_bytes((*port).fb as *mut u8, 0, 256); }
+    (*port).fbu = 0;
+    unsafe {
+        ptr::write_bytes((*port).fb as *mut u8, 0, 256);
+    }
 
     let cmdheader = (*port).clb as *mut HBACMDHeader;
     for i in 0..32 {
@@ -402,7 +412,7 @@ pub fn port_rebase(port: &mut HBAPort, n: u32) {
 
 fn find_cmdslot(port: &mut HBAPort) -> Option<u32> {
     let mut slots: u32 = port.sact | port.ci;
-    
+
     for i in 0..slots {
         if (slots & 1) == 0 {
             return Some(i);
@@ -420,7 +430,6 @@ pub unsafe fn read(
     count: u32,
     mut buf: *mut u16,
 ) -> bool {
-
     (*port).is = u32::MAX;
 
     let mut spin = 0;
@@ -434,13 +443,16 @@ pub unsafe fn read(
     let cmdheader_ptr = (*port).clb as *mut HBACMDHeader;
     let cmdheader = cmdheader_ptr.add(slot as usize);
 
-    (*cmdheader).byte0.set_cfl((size_of::<FISRegH2D>() / 4) as u8);
-    (*cmdheader).byte0.with_w(false); 
+    (*cmdheader)
+        .byte0
+        .set_cfl((size_of::<FISRegH2D>() / 4) as u8);
+    (*cmdheader).byte0.with_w(false);
     (*cmdheader).prdtl = (((count - 1) >> 4) + 1) as u16;
 
     let cmdtbl = (*cmdheader).ctba as *mut HBACMDTBL;
 
-    let tbl_size = size_of::<HBACMDTBL>() + (((*cmdheader).prdtl as usize - 1) * size_of::<HBAPRDTEntry>());
+    let tbl_size =
+        size_of::<HBACMDTBL>() + (((*cmdheader).prdtl as usize - 1) * size_of::<HBAPRDTEntry>());
     ptr::write_bytes(cmdtbl as *mut u8, 0, tbl_size);
 
     let prdt_count = (*cmdheader).prdtl as usize;
@@ -449,28 +461,28 @@ pub unsafe fn read(
     for i in 0..(prdt_count - 1) {
         let prdt_entry = &mut (*cmdtbl).prdt_entry[i];
         prdt_entry.dba = buf as u32;
-        prdt_entry.set_dbc(8 * 1024 - 1); 
+        prdt_entry.set_dbc(8 * 1024 - 1);
         prdt_entry.set_i(true);
 
         buf = buf.add(4 * 1024);
-        remaining_count -= 16; 
+        remaining_count -= 16;
     }
 
     let last = prdt_count - 1;
     let last_entry = &mut (*cmdtbl).prdt_entry[last];
     last_entry.dba = buf as u32;
-    last_entry.set_dbc((remaining_count << 9) - 1); 
+    last_entry.set_dbc((remaining_count << 9) - 1);
     last_entry.set_i(true);
 
     let cmdfis = &mut (*cmdtbl).cfis as *mut u8 as *mut FISRegH2D;
     (*cmdfis).fis_type = 0x37;
-    (*cmdfis).flags.set_c(true); 
+    (*cmdfis).flags.set_c(true);
     (*cmdfis).command = ATA_CMD_READ_DMA_EX;
 
     (*cmdfis).lba0 = startl as u8;
     (*cmdfis).lba1 = (startl >> 8) as u8;
     (*cmdfis).lba2 = (startl >> 16) as u8;
-    (*cmdfis).device = 1 << 6; 
+    (*cmdfis).device = 1 << 6;
     (*cmdfis).lba3 = (startl >> 24) as u8;
     (*cmdfis).lba4 = starth as u8;
     (*cmdfis).lba5 = (starth >> 8) as u8;
@@ -506,19 +518,26 @@ pub unsafe fn read(
 
 pub struct AHCIDevice {
     pub pci_device: PCIDevice,
-    pub is_mounted: bool
+    pub is_mounted: bool,
 }
 
 impl AHCIDevice {
     pub fn new(pci_device: PCIDevice) -> Self {
-        Self { pci_device, is_mounted: false }
+        Self {
+            pci_device,
+            is_mounted: false,
+        }
     }
 }
 
 impl Display for AHCIDevice {
     fn fmt(&self, f: &mut Formatter) -> fmt::Result {
         let m = bool_to_yn(self.is_mounted);
-        write!(f, "PCI Device: {{ {} }} | Is Mounted: {}", self.pci_device, m)
+        write!(
+            f,
+            "PCI Device: {{ {} }} | Is Mounted: {}",
+            self.pci_device, m
+        )
     }
 }
 

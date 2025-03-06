@@ -11,11 +11,11 @@ pub mod vga;
 pub mod acpi;
 pub mod base64;
 pub mod command_line;
+pub mod disks;
 pub mod executor;
 pub mod fs;
 pub mod interrupts;
 pub mod keyboard;
-pub mod disks;
 pub mod pci;
 use alloc::string::*;
 use allocator::BootInfoFrameAllocator;
@@ -23,7 +23,10 @@ use core::alloc::Layout;
 use core::panic::PanicInfo;
 use executor::{Executor, Task};
 use multiboot2::{BootInformation, BootInformationHeader};
-use x86_64::{VirtAddr, instructions::port::{Port, PortRead}};
+use x86_64::{
+    VirtAddr,
+    instructions::port::{Port, PortRead},
+};
 pub const PHYSICAL_MEMORY_OFFSET: VirtAddr = VirtAddr::new(0x0);
 pub const LEMONCAKE_VER: &str = "25m3";
 
@@ -34,7 +37,11 @@ compile_error!("This OS only supports x86_64!");
 pub extern "C" fn kernel_main(mbi: u32, magic: u32) -> ! {
     info!("Running Lemoncake {}", LEMONCAKE_VER);
     if magic != multiboot2::MAGIC {
-        panic!("MB2 magic given was NOT the correct magic! Expected {:#X?}, but got {:#X?}!", multiboot2::MAGIC, magic);
+        panic!(
+            "MB2 magic given was NOT the correct magic! Expected {:#X?}, but got {:#X?}!",
+            multiboot2::MAGIC,
+            magic
+        );
     }
 
     info!("Setting up IDT, PICS, and interrupts...");
@@ -105,34 +112,46 @@ pub fn bool_to_yn(var: bool) -> String {
 
 pub unsafe fn read_from_port<T: PortRead>(port: u16) -> T {
     let mut p: Port<T> = Port::new(port);
-    unsafe { return p.read(); }
+    unsafe {
+        return p.read();
+    }
 }
 
 pub unsafe fn write_to_port(port: u16, data: u32) {
     let mut p: Port<u32> = Port::new(port);
-    unsafe { p.write(data); }
+    unsafe {
+        p.write(data);
+    }
 }
 
 /// Writes an 8-bit value to the specified I/O port.
 pub unsafe fn outb(port: u16, value: u8) {
-    unsafe { write_to_port(port, value as u32); }
+    unsafe {
+        write_to_port(port, value as u32);
+    }
 }
 
 /// Reads an 8-bit value from the specified I/O port.
 pub unsafe fn inb(port: u16) -> u8 {
-    unsafe { return read_from_port(port); }
+    unsafe {
+        return read_from_port(port);
+    }
 }
 
 /// Reads a 32-bit value from the specified I/O port.
 #[inline]
 pub unsafe fn inl(port: u16) -> u32 {
-    unsafe { return read_from_port(port); }
+    unsafe {
+        return read_from_port(port);
+    }
 }
 
 /// Writes a 32-bit value to the specified I/O port.
 #[inline]
 pub unsafe fn outl(port: u16, val: u32) {
-    unsafe { write_to_port(port, val); }
+    unsafe {
+        write_to_port(port, val);
+    }
 }
 
 #[macro_export]

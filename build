@@ -104,7 +104,7 @@ function build() {
     fi
 
     if [ linker.ld -nt bin/kernel.bin ] || [ bin/boot.o -nt bin/kernel.bin ] || [ bin/liblemoncake.a -nt bin/kernel.bin ] || [ bin/kernel.bin -nt lemoncake.iso ] || [ grub.cfg -nt lemoncake.iso ]; then
-        ld -n -o bin/kernel.bin -T linker.ld bin/boot.o bin/liblemoncake.a bin/ahci.o
+        ld -n -o bin/kernel.bin -T linker.ld bin/boot.o bin/liblemoncake.a
         mkdir -p bin/iso/boot/grub
 
         cp grub.cfg bin/iso/boot/grub/
