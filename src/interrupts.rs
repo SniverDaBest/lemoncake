@@ -1,8 +1,6 @@
-use crate::{
-    hlt_loop, print, println,
-    vga::{Color, get_colors, set_fg},
-};
+use crate::hlt_loop;
 use lazy_static::lazy_static;
+use log::{error, warn};
 use pic8259::ChainedPics;
 use spin;
 use x86_64::{
@@ -61,8 +59,8 @@ lazy_static! {
                 .set_handler_fn(double_fault_handler)
                 .set_stack_index(DOUBLE_FAULT_IST_INDEX);
         }
-        idt[InterruptIndex::Timer.as_u8()].set_handler_fn(timer_interrupt_handler);
-        idt[InterruptIndex::Keyboard.as_u8()].set_handler_fn(keyboard_interrupt_handler);
+        //idt[InterruptIndex::Timer.as_u8()].set_handler_fn(timer_interrupt_handler);
+        //idt[InterruptIndex::Keyboard.as_u8()].set_handler_fn(keyboard_interrupt_handler);
         idt
     };
 }
@@ -71,27 +69,8 @@ pub fn init_idt() {
     IDT.load();
 }
 
-/// ### DO NOT USE THIS!!!
-/// Would NOT recommend using this. As you may be able to tell, it doesn't stop the CPU.\
-/// It continues, and uhh... it's very broken.
-extern "x86-interrupt" fn drunk_page_fault_handler(
-    stack_frame: InterruptStackFrame,
-    error_code: PageFaultErrorCode,
-) {
-    use x86_64::registers::control::Cr2;
-
-    let prev_col = get_colors()[1];
-    set_fg(Color::Red);
-    println!("(o_0) Drunk!\n");
-    println!("Exception: Page Fault");
-    println!("Accessed Address: {:?}", Cr2::read());
-    println!("Error Code: {:?}", error_code);
-    println!("Stack Frame:\n{:#?}", stack_frame);
-    set_fg(prev_col);
-}
-
 extern "x86-interrupt" fn breakpoint_handler(stack_frame: InterruptStackFrame) {
-    println!("(o_o)  Exception: Breakpoint\n{:#?}", stack_frame);
+    warn!("(o_o)  Exception: Breakpoint\n{:#?}", stack_frame);
 }
 
 extern "x86-interrupt" fn page_fault_handler(
@@ -100,12 +79,7 @@ extern "x86-interrupt" fn page_fault_handler(
 ) {
     use x86_64::registers::control::Cr2;
 
-    set_fg(Color::Red);
-    println!("(X_X)\n");
-    println!("Exception: Page Fault");
-    println!("Accessed Address: {:?}", Cr2::read());
-    println!("Error Code: {:?}", error_code);
-    println!("Stack Frame:\n{:#?}", stack_frame);
+    error!("\n(X_X)\n\nException: Page Fault\nAccessed Address: {:?}]\nError Code: {:?}\nStack Frame:\n{:#?}", Cr2::read(), error_code, stack_frame);
     hlt_loop();
 }
 
@@ -116,6 +90,7 @@ extern "x86-interrupt" fn double_fault_handler(
     panic!("Exception: Double Fault\n{:#?}", stack_frame);
 }
 
+/*
 extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
     unsafe {
         PICS.lock()
@@ -135,3 +110,4 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStac
             .notify_end_of_interrupt(InterruptIndex::Keyboard.as_u8());
     }
 }
+*/

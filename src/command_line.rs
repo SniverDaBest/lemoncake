@@ -1,11 +1,5 @@
 use crate::{
-    LEMONCAKE_VER, base64,
-    disks::{self, ahci},
-    error, info, keyboard, nftodo,
-    pci::{self, scan_pci_bus},
-    print, println,
-    vga::{Color, WRITER, set_bg, set_fg},
-    warning,
+    LEMONCAKE_VER, base64, keyboard
 };
 use alloc::{
     string::{String, ToString},
@@ -13,6 +7,8 @@ use alloc::{
 };
 use futures_util::stream::StreamExt;
 use pc_keyboard::{DecodedKey, Keyboard, ScancodeSet1};
+use uefi::{println, print};
+use log::*;
 
 static SHSH_VERSION: &str = "b0.5";
 
@@ -64,7 +60,7 @@ fn process_command(command: &str) {
     if command.trim().starts_with("echo") {
         println!("{}", command.replace("echo ", "").as_str().trim());
     } else if command.trim().starts_with("clear") {
-        WRITER.lock().clear_screen();
+        error!("This doesn't work!");
     } else if command.trim().starts_with("ver") {
         println!(
             "SHSH Version {}\nLemoncake version: {}",
@@ -77,6 +73,7 @@ fn process_command(command: &str) {
         let input_str = command.split_whitespace().nth(1).unwrap_or("").as_bytes();
         println!("{}", base64::decode(input_str));
     } else if command.trim().starts_with("color") {
+        /*
         let cmds: Vec<&str> = command.trim().split_ascii_whitespace().collect();
         if cmds.len() < 3 {
             println!("Usage:");
@@ -128,13 +125,18 @@ fn process_command(command: &str) {
             c => {
                 warning!("Color {} is not an acceptable value!", c);
             }
-        }
+        }*/
+
+        error!("This command doesn't work.");
     } else if command.trim().starts_with("disks") {
+        error!("This doesn't work.");
+        /*
         let devs = ahci::scan_for_ahci_devs();
         for dev in devs {
             info!("Found AHCI Device: {}", dev);
-        }
+        }*/
     } else if command.trim().starts_with("pci") {
+        /*
         let cmds: Vec<&str> = command.trim().split_ascii_whitespace().collect();
         if cmds.len() < 2 {
             println!("Usage:");
@@ -152,11 +154,11 @@ fn process_command(command: &str) {
             println!("Usage:");
             println!("  -h -- Shows this message");
             println!("  -s -- Searches for all PCI devices.");
-        }
+        }*/
     } else if command.trim().starts_with("error") {
         error!("{}", command.replace("error", "").as_str().trim());
     } else if command.trim().starts_with("warning") {
-        warning!("{}", command.replace("warning", "").as_str().trim());
+        warn!("{}", command.replace("warning", "").as_str().trim());
     } else if command.trim().starts_with("info") {
         info!("{}", command.replace("info", "").as_str().trim());
     } else if command.trim().starts_with("panic") {
@@ -165,20 +167,21 @@ fn process_command(command: &str) {
         println!("SHSH Version {}.", SHSH_VERSION);
         println!("help -- Shows this message.");
         println!("echo [input] -- Echos user input.");
-        println!("clear -- Clears the screen.");
         println!(
             "ver -- Shows the version of SHSH and Lemoncake. (currently running SHSH {})",
             SHSH_VERSION
         );
-        println!("color [fg, bg] -- Changes the color");
         println!("b64encode [input] -- Encodes user input into Base64");
         println!("b64decode [base64] -- Decodes Base64 user input into normal text.");
-        println!("disks -- The disk utility.");
-        println!("pci -- The PCI utility");
         println!("error [message] -- prints like an error");
         println!("warning [message] -- prints like a warning");
         println!("info [message] -- prints like info");
         println!("panic [message] -- panics the system\n");
+        warn!("These commands don't work!");
+        println!("clear -- Clears the screen.");
+        println!("color [fg, bg] -- Changes the color");
+        println!("disks -- The disk utility.");
+        println!("pci -- The PCI utility");
     } else if command.trim() == "" {
         println!();
     } else {

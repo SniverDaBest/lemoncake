@@ -3,3 +3,5 @@ bin/
 Cargo.lock
 *.iso
 *.img
+*.bin
+*.fd

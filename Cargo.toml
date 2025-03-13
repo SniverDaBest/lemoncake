@@ -1,22 +1,24 @@
 [package]
 name = "lemoncake"
-version = "25.3.0"
+version = "25.3.0-UEFI"
 edition = "2024"
-
-[lib]
-crate-type = ["staticlib"]
 
 [dependencies]
 lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
 linked_list_allocator = "0.10.5"
-multiboot2 = "0.23.1"
 pic8259 = "0.11.0"
 spin = "0.9.8"
-volatile = "0.2.6"
+#volatile = "0.2.6"
 x86_64 = "0.15.2"
 pc-keyboard = "0.8.0"
 conquer-once = { version = "0.4.0", default-features = false }
-bitfield-struct = "0.10.1"
+#bitfield-struct = "0.10.1"
+log = "0.4.21"
+uefi-raw = "0.10.0"
+
+[dependencies.uefi]
+version = "0.34.1"
+features = ["logger", "global_allocator", "unstable"]
 
 [dependencies.crossbeam-queue]
 version = "0.3.12"

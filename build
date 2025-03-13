@@ -29,98 +29,39 @@ else
 fi
 
 function build() {
-    mkdir -p bin
-
-    command_exists() {
-        command -v "$1" >/dev/null 2>&1
-    }
-
-    if command_exists nasm; then
-        nasm_available=true
-    else
-        nasm_available=false
-    fi
-
-    if command_exists as; then
-        gas_available=true
-    else
-        gas_available=false
-    fi
-
-    if $nasm_available && $gas_available; then
-        echo "Both NASM and GNU AS are available."
-        read -p "Which assembler would you like to use? (nasm/gas): " assembler_choice
-        assembler_choice=$(echo "$assembler_choice" | tr '[:upper:]' '[:lower:]')
-        if [[ "$assembler_choice" != "nasm" && "$assembler_choice" != "gas" ]]; then
-            echo "Invalid choice. Please run the script again and choose either 'nasm' or 'gas'."
-            exit 1
-        fi
-    elif $nasm_available; then
-        assembler_choice="nasm"
-        echo "Only NASM is available. Using NASM."
-    elif $gas_available; then
-        assembler_choice="gas"
-        echo "Only GNU AS is available. Using GNU AS."
-    else
-        echo "Neither NASM nor GNU AS is installed. Please install at least one assembler to proceed."
-        exit 1
-    fi
-
-    if [ src/asm/boot.asm -nt bin/boot.o ]; then
-        case "$assembler_choice" in
-            nasm)
-                nasm -felf64 src/asm/boot.asm -o bin/boot.o
-                ;;
-            gas)
-                as --64 src/asm/boot.S -o bin/boot.o
-                ;;
-        esac
-    fi
+    mkdir -p bin/esp/efi/boot
 
     if [ release ]; then
         cargo build --release
-        nb=$(md5sum target/x86_64-lemoncake/release/liblemoncake.a | awk '{print $1}')
-        pb=$(md5sum bin/liblemoncake.a | awk '{print $1}')
-
-        if [ "$nb" = "$pb" ]; then
-            echo "Rust code already up-to-date."
-        else
-            cp target/x86_64-lemoncake/release/liblemoncake.a bin/liblemoncake.a
-        fi
-
-        # expand as needed
+        cp target/x86_64-unknown-uefi/release/lemoncake.efi bin/esp/efi/boot/bootx64.efi
     else
         cargo build
-        nb=$(md5sum target/x86_64-lemoncake/debug/liblemoncake.a | awk '{print $1}')
-        pb=$(md5sum bin/liblemoncake.a | awk '{print $1}')
-
-        if [ "$nb" = "$pb" ]; then
-            echo "Rust code already up-to-date."
-        else
-            cp target/x86_64-lemoncake/debug/liblemoncake.a bin/liblemoncake.a
-        fi
-
-        # expand as needed
+        cp target/x86_64-unknown-uefi/debug/lemoncake.efi bin/esp/efi/boot/bootx64.efi
     fi
 
-    if [ linker.ld -nt bin/kernel.bin ] || [ bin/boot.o -nt bin/kernel.bin ] || [ bin/liblemoncake.a -nt bin/kernel.bin ] || [ bin/kernel.bin -nt lemoncake.iso ] || [ grub.cfg -nt lemoncake.iso ]; then
-        ld -n -o bin/kernel.bin -T linker.ld bin/boot.o bin/liblemoncake.a
-        mkdir -p bin/iso/boot/grub
-
-        cp grub.cfg bin/iso/boot/grub/
-        cp bin/kernel.bin bin/iso/boot/
-
-        grub2-mkrescue -o lemoncake.iso bin/iso
-    fi
+    #if [ linker.ld -nt bin/kernel.bin ] || [ bin/boot.o -nt bin/kernel.bin ] || [ bin/liblemoncake.a -nt bin/kernel.bin ] || [ bin/kernel.bin -nt lemoncake.iso ] || [ grub.cfg -nt lemoncake.iso ]; then
+    #    ld -n -o bin/kernel.bin -T linker.ld bin/boot.o bin/liblemoncake.a
+    #    mkdir -p bin/iso/boot/grub
+    #
+    #    cp grub.cfg bin/iso/boot/grub/
+    #    cp bin/kernel.bin bin/iso/boot/
+    #
+    #    grub2-mkrescue -o lemoncake.iso bin/iso
+    #fi
 }
 
 function run() {
     build
-    if [ ! -f hd.img ]; then
-        echo "Creating hard drive image..."
-        qemu-img create hd.img 128M
-    fi
-    qemu-system-x86_64 -cdrom lemoncake.iso -drive id=disk,file=hd.img,if=none,format=raw -device ahci,id=ahci -device ide-hd,drive=disk,bus=ahci.0 -m 128M --enable-kvm
+    #if [ ! -f hd.img ]; then
+    #    echo "Creating hard drive image..."
+    #    qemu-img create hd.img 128M
+    #fi
+    cp ovmf_vars.bin bin/
+    cp ovmf_code.bin bin/
+    qemu-system-x86_64 -enable-kvm \
+    -bios bin/ovmf.bin\
+    -drive format=raw,file=fat:rw:bin/esp\
+    -m 256M
 }
 
 function clean() {
