@@ -26,24 +26,41 @@ pub const PHYSICAL_MEMORY_OFFSET: VirtAddr = VirtAddr::new(0x0);
 */
 
 pub const LEMONCAKE_VER: &str = "25m3-UEFI";
+use core::mem::MaybeUninit;
+
+use display::Buffer;
+use alloc::vec;
 use log::{error, info};
 use uefi::{
     helpers,
     prelude::*,
-    proto::console::gop::GraphicsOutput,
+    proto::console::gop::{BltOp, BltPixel, BltRegion, GraphicsOutput, Mode, ModeIter},
 };
+
+fn get_good_mode(modes: ModeIter) -> Mode {
+    for m in modes {
+        if m.info().resolution() == (640, 480) {
+            info!("Found good mode:\n{:#?}", m);
+            return m;
+        }
+    }
+
+    panic!("Couldn't find a good mode!");
+}
 
 #[entry]
 fn main() -> Status {
     helpers::init().unwrap();
-    info!("Running Lemoncake {}", LEMONCAKE_VER);
 
     let gop_handle =
         boot::get_handle_for_protocol::<GraphicsOutput>().expect("Unable to find the GOP!");
-    info!("This does appear!");
-    let mut gop = boot::open_protocol_exclusive::<GraphicsOutput>(gop_handle);
-    info!("This does NOT appear!");
+    let mut gop = boot::open_protocol_exclusive::<GraphicsOutput>(gop_handle).expect("Unable to get the GOP!");
+    let mode = get_good_mode(gop.modes());
 
+    gop.set_mode(&mode).expect("Unable to set GOP mode!");
+
+    loop {}
+    
     return Status::SUCCESS;
 }
 

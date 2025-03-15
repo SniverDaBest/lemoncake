@@ -14,6 +14,7 @@ pc-keyboard = "0.8.0"
 conquer-once = { version = "0.4.0", default-features = false }
 #bitfield-struct = "0.10.1"
 log = "0.4.21"
+uart_16550 = "0.3.2"
 uefi-raw = "0.10.0"
 
 [dependencies.uefi]
