@@ -7,6 +7,7 @@ extern crate alloc;
 pub mod base64;
 pub mod display;
 pub mod executor;
+pub mod fonts;
 
 /*
 pub mod interrupts;

@@ -1,0 +1,25 @@
+{
+    "folders": [
+        {
+            "path": ".",
+            "folder_exclude_patterns": [
+                "bin",
+                "target",
+            ],
+            "file_exclude_patterns": [
+                "Cargo.lock",
+                "*.sublime-*",
+            ]
+        }
+    ],
+    "build_systems": [
+        {
+            "name": "Lemoncake",
+            "shell_cmd": "./build run"
+        },
+        {
+            "name": "Lemoncake - Release",
+            "shell_cmd": "./build run --release"
+        }
+    ],
+}
