@@ -5,3 +5,4 @@ Cargo.lock
 *.img
 *.bin
 *.fd
+*.sublime-workspace

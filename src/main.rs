@@ -1,9 +1,10 @@
 #![no_std]
 #![no_main]
-#![feature(alloc_error_handler, abi_x86_interrupt)]
+#![feature(alloc_error_handler, abi_x86_interrupt, custom_test_frameworks)]
 #![allow(static_mut_refs)]
 
 extern crate alloc;
+
 pub mod base64;
 pub mod display;
 pub mod executor;
@@ -27,26 +28,40 @@ pub const PHYSICAL_MEMORY_OFFSET: VirtAddr = VirtAddr::new(0x0);
 */
 
 pub const LEMONCAKE_VER: &str = "25m3-UEFI";
-use core::mem::MaybeUninit;
 
 use display::Buffer;
-use alloc::vec;
+use alloc::{vec::*, string::*};
+use fontdue::{Font, FontSettings};
 use log::{error, info};
 use uefi::{
+    fs::{
+        FileSystem,
+        FileSystemResult
+    },
     helpers,
     prelude::*,
-    proto::console::gop::{BltOp, BltPixel, BltRegion, GraphicsOutput, Mode, ModeIter},
+    proto::console::gop::{
+        BltPixel, GraphicsOutput, Mode, ModeIter
+    },
+    CString16,
 };
 
 fn get_good_mode(modes: ModeIter) -> Mode {
     for m in modes {
-        if m.info().resolution() == (640, 480) {
+        if m.info().resolution() == (1920, 1080) {
             info!("Found good mode:\n{:#?}", m);
             return m;
         }
     }
 
     panic!("Couldn't find a good mode!");
+}
+
+pub fn read_file(path: &str) -> FileSystemResult<Vec<u8>> {
+    let path = CString16::try_from(path).expect("Unable to convert path (&str) to CString16!");
+    let fs = boot::get_image_file_system(boot::image_handle()).expect("Unable to get image file system!");
+    let mut fs = FileSystem::new(fs);
+    fs.read(path.as_ref())
 }
 
 #[entry]
@@ -60,9 +75,16 @@ fn main() -> Status {
 
     gop.set_mode(&mode).expect("Unable to set GOP mode!");
 
+    let mut buffer = Buffer::new(&mut gop, 1920, 1080);
+    buffer.fill_buffer(BltPixel::new(0, 0, 0)).expect("Unable to fill screen!");
+
+    let font_data = read_file("font.ttf").expect("Unable to read font file!");
+
+    let f = Font::from_bytes(font_data.as_slice(), FontSettings::default()).expect("Unable to create font from bytes!");
+    fonts::draw_string(f.clone(), "How much mush could a mushboom boom if a mushboom could boom mush?".to_string(), 12.0, &mut buffer, 0, 0);
+    fonts::draw_string(f.clone(), "A mushboom can boom as much mush as a mushboom if a mushboom could boom mush.".to_string(), 12.0, &mut buffer, 0, 20);
+
     loop {}
-    
-    return Status::SUCCESS;
 }
 
 #[panic_handler]
@@ -76,81 +98,4 @@ fn panic(info: &core::panic::PanicInfo) -> ! {
     );
 
     loop {}
-}
-
-/*
-#[alloc_error_handler]
-fn alloc_error_handler(layout: Layout) -> ! {
-    panic!(
-        "(X_X)\n\nUh-oh! Lemoncake panicked, as it was unable to allocate {} bytes of memory!\n\nLayout: {:?}",
-        layout.size(),
-        layout
-    );
-}
-
-pub fn bool_to_yn(var: bool) -> String {
-    match var {
-        true => "yes".to_string(),
-        false => "no".to_string(),
-    }
-}
-
-pub unsafe fn read_from_port<T: PortRead>(port: u16) -> T {
-    let mut p: Port<T> = Port::new(port);
-    unsafe {
-        return p.read();
-    }
-}
-
-pub unsafe fn write_to_port(port: u16, data: u32) {
-    let mut p: Port<u32> = Port::new(port);
-    unsafe {
-        p.write(data);
-    }
-}
-
-/// Writes an 8-bit value to the specified I/O port.
-pub unsafe fn outb(port: u16, value: u8) {
-    unsafe {
-        write_to_port(port, value as u32);
-    }
-}
-
-/// Reads an 8-bit value from the specified I/O port.
-pub unsafe fn inb(port: u16) -> u8 {
-    unsafe {
-        return read_from_port(port);
-    }
-}
-
-/// Reads a 32-bit value from the specified I/O port.
-#[inline]
-pub unsafe fn inl(port: u16) -> u32 {
-    unsafe {
-        return read_from_port(port);
-    }
-}
-
-/// Writes a 32-bit value to the specified I/O port.
-#[inline]
-pub unsafe fn outl(port: u16, val: u32) {
-    unsafe {
-        write_to_port(port, val);
-    }
-}
-
-#[macro_export]
-macro_rules! nftodo {
-    () => {
-        let prev = $crate::vga::get_colors()[1];
-        $crate::vga::set_fg($crate::vga::Color::Pink);
-        println!("todo");
-        $crate::vga::set_fg(prev);
-    };
-}
-*/
-pub fn hlt_loop() -> ! {
-    loop {
-        x86_64::instructions::hlt()
-    }
 }

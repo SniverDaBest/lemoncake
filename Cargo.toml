@@ -17,9 +17,14 @@ log = "0.4.21"
 uart_16550 = "0.3.2"
 uefi-raw = "0.10.0"
 
+[dependencies.fontdue]
+version = "0.9.3"
+default-features = false
+features = ["hashbrown"]
+
 [dependencies.uefi]
 version = "0.34.1"
-features = ["logger", "global_allocator", "unstable"]
+features = ["logger", "global_allocator", "unstable", "alloc"]
 
 [dependencies.crossbeam-queue]
 version = "0.3.12"

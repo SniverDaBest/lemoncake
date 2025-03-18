@@ -22,5 +22,11 @@ To build, you will need the following:
 - qemu
 <!-- END OF LIST><!-->
 
+# Todo
+- [X] Text rendering
+- [ ] Get running normally working *(aka `cargo run`)*
+- [ ] Optimize on memory *(i don't need to have all of those Strings and Vecs, could prob optimize them.)*
+- [ ] Kernel
+
 # License
 Lemoncake uses the BSD 2-clause (simplified) license. Check `LICENSE` for the full license.

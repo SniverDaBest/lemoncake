@@ -56,8 +56,7 @@ function run() {
     #    echo "Creating hard drive image..."
     #    qemu-img create hd.img 128M
     #fi
-    cp ovmf_vars.bin bin/
-    cp ovmf_code.bin bin/
+    cp /usr/share/qemu/ovmf-x86_64.bin bin/ovmf.bin
     qemu-system-x86_64 -enable-kvm \
     -bios bin/ovmf.bin\
     -drive format=raw,file=fat:rw:bin/esp\
