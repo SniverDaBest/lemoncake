@@ -29,21 +29,16 @@ pub const PHYSICAL_MEMORY_OFFSET: VirtAddr = VirtAddr::new(0x0);
 
 pub const LEMONCAKE_VER: &str = "25m3-UEFI";
 
+use alloc::{string::*, vec::*};
 use display::Buffer;
-use alloc::{vec::*, string::*};
 use fontdue::{Font, FontSettings};
 use log::{error, info};
 use uefi::{
-    fs::{
-        FileSystem,
-        FileSystemResult
-    },
+    CString16,
+    fs::{FileSystem, FileSystemResult},
     helpers,
     prelude::*,
-    proto::console::gop::{
-        BltPixel, GraphicsOutput, Mode, ModeIter
-    },
-    CString16,
+    proto::console::gop::{BltPixel, GraphicsOutput, Mode, ModeIter},
 };
 
 fn get_good_mode(modes: ModeIter) -> Mode {
@@ -59,7 +54,8 @@ fn get_good_mode(modes: ModeIter) -> Mode {
 
 pub fn read_file(path: &str) -> FileSystemResult<Vec<u8>> {
     let path = CString16::try_from(path).expect("Unable to convert path (&str) to CString16!");
-    let fs = boot::get_image_file_system(boot::image_handle()).expect("Unable to get image file system!");
+    let fs = boot::get_image_file_system(boot::image_handle())
+        .expect("Unable to get image file system!");
     let mut fs = FileSystem::new(fs);
     fs.read(path.as_ref())
 }
@@ -70,19 +66,56 @@ fn main() -> Status {
 
     let gop_handle =
         boot::get_handle_for_protocol::<GraphicsOutput>().expect("Unable to find the GOP!");
-    let mut gop = boot::open_protocol_exclusive::<GraphicsOutput>(gop_handle).expect("Unable to get the GOP!");
+    let mut gop = boot::open_protocol_exclusive::<GraphicsOutput>(gop_handle)
+        .expect("Unable to get the GOP!");
     let mode = get_good_mode(gop.modes());
 
     gop.set_mode(&mode).expect("Unable to set GOP mode!");
 
-    let mut buffer = Buffer::new(&mut gop, 1920, 1080);
-    buffer.fill_buffer(BltPixel::new(0, 0, 0)).expect("Unable to fill screen!");
+    let mut buf = Buffer::new(&mut gop, 1920, 1080);
+    buf
+        .fill_buffer(BltPixel::new(0, 0, 0))
+        .expect("Unable to fill screen!");
 
     let font_data = read_file("font.ttf").expect("Unable to read font file!");
 
-    let f = Font::from_bytes(font_data.as_slice(), FontSettings::default()).expect("Unable to create font from bytes!");
-    fonts::draw_string(f.clone(), "How much mush could a mushboom boom if a mushboom could boom mush?".to_string(), 12.0, &mut buffer, 0, 0);
-    fonts::draw_string(f.clone(), "A mushboom can boom as much mush as a mushboom if a mushboom could boom mush.".to_string(), 12.0, &mut buffer, 0, 20);
+    let f = Font::from_bytes(font_data.as_slice(), FontSettings::default())
+        .expect("Unable to create font from bytes!");
+
+    fonts::draw_string(
+        f.clone(),
+        "How much mush could a mushboom boom if a mushboom could boom mush?".to_string(),
+        12.0,
+        &mut buf,
+        0,
+        0,
+    );
+    fonts::draw_string(
+        f.clone(),
+        "A mushboom can boom as much mush as a mushboom if a mushboom could boom mush.".to_string(),
+        12.0,
+        &mut buf,
+        0,
+        14,
+    );
+
+    fonts::draw_string(
+        f.clone(),
+        "this is a tab: [\t]".to_string(),
+        12.0,
+        &mut buf,
+        50,
+        50,
+    );
+
+    fonts::draw_string(
+        f.clone(),
+        "this is a newline: [\n]".to_string(),
+        12.0,
+        &mut buf,
+        65,
+        65,
+    );
 
     loop {}
 }

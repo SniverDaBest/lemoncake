@@ -9,17 +9,23 @@
             "file_exclude_patterns": [
                 "Cargo.lock",
                 "*.sublime-*",
-            ]
+            ],
         }
     ],
     "build_systems": [
         {
             "name": "Lemoncake",
-            "shell_cmd": "./build run"
+            "shell_cmd": "cd $project_path && ./build run",
+            "shell": true,
         },
         {
             "name": "Lemoncake - Release",
-            "shell_cmd": "./build run --release"
+            "shell_cmd": "cd $project_path && ./build run --release",
+            "shell": true,
         }
     ],
+    "settings":
+    {
+		"rust_syntax_checking": false
+	},
 }

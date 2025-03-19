@@ -1,10 +1,10 @@
 use alloc::vec;
 use alloc::vec::Vec;
+use log::warn;
 use uefi::{
     Result,
     proto::console::gop::{BltOp, BltPixel, BltRegion, GraphicsOutput},
 };
-use log::warn;
 
 pub struct Buffer<'a> {
     pub width: usize,
@@ -33,7 +33,9 @@ impl<'a> Buffer<'a> {
 
     /// Will return None if accessing pixel that is out of bounds.
     pub fn get_pxl(&mut self, x: usize, y: usize) -> Option<&mut BltPixel> {
-        if self.check_bounds(x, y) { return None }
+        if self.check_bounds(x, y) {
+            return None;
+        }
         self.pixels.get_mut(y * self.width + x)
     }
 
@@ -54,8 +56,18 @@ impl<'a> Buffer<'a> {
     }
 
     /// Returns INVALID_PARAMETER if accessing out-of-bounds area of framebuffer.
-    pub fn draw_bitmap(&mut self, bitmap: &[BltPixel], bmp_width: usize, bmp_height: usize, pos_x: usize, pos_y: usize) -> Result {  
-        if bitmap.len() != bmp_width * bmp_height || self.check_bounds(pos_x, pos_y) || self.check_bounds(bmp_width, bmp_height) {
+    pub fn draw_bitmap(
+        &mut self,
+        bitmap: &[BltPixel],
+        bmp_width: usize,
+        bmp_height: usize,
+        pos_x: usize,
+        pos_y: usize,
+    ) -> Result {
+        if bitmap.len() != bmp_width * bmp_height
+            || self.check_bounds(pos_x, pos_y)
+            || self.check_bounds(bmp_width, bmp_height)
+        {
             return Err(uefi::Status::INVALID_PARAMETER.into());
         }
 

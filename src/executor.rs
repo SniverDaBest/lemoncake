@@ -3,7 +3,7 @@ use core::{
     future::Future,
     pin::Pin,
     sync::atomic::{AtomicU64, Ordering},
-    task::{Context, Poll, RawWaker, RawWakerVTable, Waker},
+    task::{Context, Poll, Waker},
 };
 use crossbeam_queue::ArrayQueue;
 
