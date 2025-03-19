@@ -10,14 +10,15 @@ env:
   CARGO_TERM_COLOR: always
 
 jobs:
-  build:
+  check:
 
     runs-on: ubuntu-latest
 
     steps:
-    - name: Install QEMU & OVMF
-      run: sudo apt-get update && sudo apt-get install -y qemu-system ovmf
-      
     - uses: actions/checkout@v4
-    - name: Build
-      run: chmod +x ./build && ./build build --release
+    - name: Check
+      run: cargo check
+
+    - uses: actions/checkout@v4
+    - name: Clippy
+      run: cargo clippy
