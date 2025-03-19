@@ -16,7 +16,7 @@ jobs:
 
     steps:
     - name: Install QEMU & OVMF
-      run: sudo apt-get update && sudo apt-get install -y qemu ovmf
+      run: sudo apt-get update && sudo apt-get install -y qemu-system-x86_64 ovmf
       
     - uses: actions/checkout@v4
     - name: Build
