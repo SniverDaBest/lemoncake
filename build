@@ -33,10 +33,10 @@ function build() {
 
     if [ release ]; then
         cargo build --release
-        cp target/x86_64-unknown-uefi/release/lemoncake.efi bin/esp/efi/boot/bootx64.efi
+        cp target/x86_64-unknown-uefi/release/lemoncake-bootloader.efi bin/esp/efi/boot/bootx64.efi
     else
         cargo build
-        cp target/x86_64-unknown-uefi/debug/lemoncake.efi bin/esp/efi/boot/bootx64.efi
+        cp target/x86_64-unknown-uefi/debug/lemoncake-bootloader.efi bin/esp/efi/boot/bootx64.efi
     fi
 
     #if [ linker.ld -nt bin/kernel.bin ] || [ bin/boot.o -nt bin/kernel.bin ] || [ bin/liblemoncake.a -nt bin/kernel.bin ] || [ bin/kernel.bin -nt lemoncake.iso ] || [ grub.cfg -nt lemoncake.iso ]; then
@@ -56,11 +56,11 @@ function run() {
     #    echo "Creating hard drive image..."
     #    qemu-img create hd.img 128M
     #fi
-    cp /usr/share/OVMF/x64/OVMF.fd bin/OVMF.fd
-    qemu-system-x86_64 -enable-kvm \
-    -bios bin/OVMF.fd\
-    -drive format=raw,file=fat:rw:bin/esp\
-    -m 256M
+
+    if [ ! -f bin/OVMF.fd ]; then
+        cp /usr/share/OVMF/x64/OVMF.fd bin/OVMF.fd
+    fi
+    qemu-system-x86_64 -enable-kvm -bios bin/OVMF.fd -drive format=raw,file=fat:rw:bin/esp -m 256M -serial stdio
 }
 
 function clean() {

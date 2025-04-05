@@ -1,5 +1,5 @@
 [package]
-name = "lemoncake"
+name = "lemoncake-bootloader"
 version = "25.3.0-UEFI"
 edition = "2024"
 
@@ -16,6 +16,7 @@ conquer-once = { version = "0.4.0", default-features = false }
 log = "0.4.21"
 uart_16550 = "0.3.2"
 uefi-raw = "0.10.0"
+spinning_top = "0.3.0"
 
 [dependencies.fontdue]
 version = "0.9.3"

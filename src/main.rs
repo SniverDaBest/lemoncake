@@ -1,38 +1,23 @@
 #![no_std]
 #![no_main]
-#![feature(alloc_error_handler, abi_x86_interrupt, custom_test_frameworks)]
-#![allow(static_mut_refs)]
+#![feature(alloc_error_handler, abi_x86_interrupt, core_intrinsics)]
+#![allow(
+    static_mut_refs,
+    clippy::needless_return,
+    unsafe_op_in_unsafe_fn,
+    clippy::missing_safety_doc
+)]
 
 extern crate alloc;
 
-pub mod base64;
 pub mod display;
-pub mod executor;
 pub mod fonts;
 
-/*
-pub mod interrupts;
-pub mod acpi;
-pub mod disks;
-pub mod fs;
-pub mod pci;
-pub mod command_line;
-pub mod keyboard;
-use allocator::BootInfoFrameAllocator;
-use core::alloc::Layout;
-use x86_64::{
-    VirtAddr,
-    instructions::port::{Port, PortRead},
-};
-pub const PHYSICAL_MEMORY_OFFSET: VirtAddr = VirtAddr::new(0x0);
-*/
-
-pub const LEMONCAKE_VER: &str = "25m3-UEFI";
-
-use alloc::{string::*, vec::*};
-use display::Buffer;
+use alloc::vec::*;
+use display::{Buffer, TTY, TTYColors};
 use fontdue::{Font, FontSettings};
 use log::{error, info};
+use spinning_top::Spinlock;
 use uefi::{
     CString16,
     fs::{FileSystem, FileSystemResult},
@@ -40,6 +25,9 @@ use uefi::{
     prelude::*,
     proto::console::gop::{BltPixel, GraphicsOutput, Mode, ModeIter},
 };
+
+pub const LEMONCAKE_VER: &str = "25m3-UEFI";
+pub static TERM: Spinlock<TTY> = Spinlock::new(TTY::new());
 
 fn get_good_mode(modes: ModeIter) -> Mode {
     for m in modes {
@@ -73,50 +61,18 @@ fn main() -> Status {
     gop.set_mode(&mode).expect("Unable to set GOP mode!");
 
     let mut buf = Buffer::new(&mut gop, 1920, 1080);
-    buf
-        .fill_buffer(BltPixel::new(0, 0, 0))
-        .expect("Unable to fill screen!");
+    buf.fill_buffer(BltPixel::new(0, 0, 0))
+        .expect("Unable to clean the screen!");
 
     let font_data = read_file("font.ttf").expect("Unable to read font file!");
 
     let f = Font::from_bytes(font_data.as_slice(), FontSettings::default())
         .expect("Unable to create font from bytes!");
 
-    fonts::draw_string(
-        f.clone(),
-        "How much mush could a mushboom boom if a mushboom could boom mush?".to_string(),
-        12.0,
-        &mut buf,
-        0,
-        0,
-    );
-    fonts::draw_string(
-        f.clone(),
-        "A mushboom can boom as much mush as a mushboom if a mushboom could boom mush.".to_string(),
-        12.0,
-        &mut buf,
-        0,
-        14,
-    );
+    TERM.lock().set_colors(TTYColors::default());
+    TERM.lock().write_str(&mut buf, &f, "god this text is mangled lol\nabcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ1234567890`~!@#$%^&*()-_=+[{}]\\|;:'\",<.>/?").expect("Unable to write text to TTY!");
 
-    fonts::draw_string(
-        f.clone(),
-        "this is a tab: [\t]".to_string(),
-        12.0,
-        &mut buf,
-        50,
-        50,
-    );
-
-    fonts::draw_string(
-        f.clone(),
-        "this is a newline: [\n]".to_string(),
-        12.0,
-        &mut buf,
-        65,
-        65,
-    );
-
+    info!("Done!");
     loop {}
 }
 

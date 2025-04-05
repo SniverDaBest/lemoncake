@@ -6,3 +6,4 @@ Cargo.lock
 *.bin
 *.fd
 *.sublime-workspace
+*.ttf
