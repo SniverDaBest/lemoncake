@@ -36,7 +36,7 @@ fn main() -> Status {
     let fb_addr = fb.as_mut_ptr();
     let res = gop.current_mode_info().resolution();
 
-    serial_println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%\nFramebuffer info:\nAddress: {:?}\nResolution: {}x{}\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%", fb_addr, res.0, res.1);
+    serial_println!("%%%%%%%%%%%%%%%%%%%%%%%%%%%%\nFramebuffer info:\nAddress: {:?}\nResolution: {}x{}\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%", fb_addr, res.0, res.1);
     serial_println!("Booting Lemoncake...");
 
     let _mmap = unsafe { exit_boot_services(MemoryType::LOADER_DATA) };
