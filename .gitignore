@@ -1,4 +1,5 @@
 target/
+kernel/target/
 bin/
 Cargo.lock
 *.iso
@@ -7,3 +8,4 @@ Cargo.lock
 *.fd
 *.sublime-workspace
 *.ttf
+qemu_log.log

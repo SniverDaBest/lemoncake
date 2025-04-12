@@ -1,0 +1,5 @@
+#!/bin/bash
+
+cargo build -vv
+objcopy -O binary target/x86_64-lemoncake/debug/kernel target/kernel.bin
+xxd target/kernel.bin | grep kb00t!

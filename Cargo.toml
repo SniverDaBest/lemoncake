@@ -7,8 +7,11 @@ edition = "2024"
 lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
 spin = "0.9.8"
 uart_16550 = "0.3.2"
-uefi = "0.34.1"
 x86_64 = "0.15.2"
+
+[dependencies.uefi]
+version = "0.34.1"
+features = ["global_allocator", "alloc"]
 
 [profile.dev]
 panic = "abort"
