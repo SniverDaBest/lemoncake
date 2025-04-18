@@ -19,13 +19,14 @@ use uefi::{
 
 fn get_good_mode(modes: ModeIter) -> Mode {
     for m in modes {
-        if m.info().resolution() == (640, 480) {
-            serial_println!("Found good mode:\n{:#?}", m);
-            return m;
-        }
+        return if m.info().resolution() == (800, 600) {
+            m
+        } else {
+            continue;
+        };
     }
 
-    panic!("Couldn't find a good mode!");
+    panic!("Couldn't find good GOP mode!");
 }
 
 pub fn read_file(path: &str) -> FileSystemResult<Vec<u8>> {
@@ -41,6 +42,22 @@ pub fn read_file(path: &str) -> FileSystemResult<Vec<u8>> {
 fn main() -> Status {
     helpers::init().unwrap();
 
+    serial_print!("Loading kernel...           ");
+    let file = read_file("kernel").expect("Unable to get kernel file!");
+    let kernel = file.as_slice();
+    let data = KernelHeader::from_memory(kernel.as_ptr());
+    let info = data.1;
+    let header = data.0;
+    serial_println!("...Done!");
+
+    serial_print!("Getting kernel entry...     ");
+    let entry_data = unsafe { header.get_entry(kernel) };
+    let kmain = entry_data.0;
+    let base_entry_addr = entry_data.1;
+    let entry_addr = entry_data.2;
+    serial_println!("...Done!");
+
+    serial_print!("Getting GOP handle...       ");
     let gop_handle =
         boot::get_handle_for_protocol::<GraphicsOutput>().expect("Unable to find the GOP!");
     let mut gop = boot::open_protocol_exclusive::<GraphicsOutput>(gop_handle)
@@ -51,42 +68,30 @@ fn main() -> Status {
     let mut fb = gop.frame_buffer();
     let fb_addr = fb.as_mut_ptr();
     let res = gop.current_mode_info().resolution();
-
-    serial_println!(
-        "%%%%%%%%%%%%%%%%%%%%%%%%%%%%\nFramebuffer info:\nAddress: {:?}\nResolution: {}x{}\n%%%%%%%%%%%%%%%%%%%%%%%%%%%%\n",
-        fb_addr,
-        res.0,
-        res.1
-    );
-    serial_print!("Loading kernel...           ");
-    let kernel_file = read_file("kernel").expect("Unable to get kernel file!");
-    let kernel_slice = kernel_file.as_slice();
-    let header = KernelHeader::from_memory(kernel_slice.as_ptr());
     serial_println!("...Done!");
 
     serial_print!("Exiting boot services...    ");
     let _mmap = unsafe { exit_boot_services(MemoryType::LOADER_DATA) };
-    serial_println!("...Done!");
+    serial_println!("...Done!\n");
 
-    serial_print!("Getting kernel entry...     ");
-    let entry_data = unsafe { header.get_entry(kernel_slice) };
-    let kmain = entry_data.0;
-    let base_entry_addr = entry_data.1;
-    let entry_addr = entry_data.2;
-    serial_println!("...Done!");
+    if info != "" {
+        serial_println!("{}", info);
+    }
     serial_println!(
         "Entry Point located at {:X?} ({:X?})",
         base_entry_addr,
         entry_addr
     );
+    serial_println!("Framebuffer address: {:?}", fb_addr);
+    serial_println!("Framebuffer resolution: {}x{}\n", res.0, res.1);
 
-    serial_println!("Launching kernel...");
+    serial_println!("Launching kernel...\n");
 
     unsafe {
         kmain(fb_addr);
     }
 
-    panic!("How the hell did we get here...");
+    panic!("Kernel returned!?");
 }
 
 #[panic_handler]

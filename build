@@ -17,35 +17,26 @@ if [ "$#" -lt 1 ]; then
     exit 1
 fi
 
-if [ "$#" -gt 1 ]; then
-    if [ "$2" = "--release" ]; then
-        release=true
-        echo "Building for release mode..."
-    else
-        release=false
-    fi
-else
-    release=false
-fi
-
 function build() {
     mkdir -p bin/esp/efi/boot
 
-    if [ release ]; then
-        cargo build --release
-        cp target/x86_64-unknown-uefi/release/lemoncake-bootloader.efi bin/esp/efi/boot/bootx64.efi
-        cd kernel
-        ./build
-        cp target/kernel.bin ../bin/esp/kernel
-        cd ..
+    command_exists() {
+        command -v "$1" >/dev/null 2>&1
+    }
 
+    cargo build
+    cp target/x86_64-unknown-uefi/debug/lemoncake-bootloader.efi bin/esp/efi/boot/bootx64.efi
+    cd kernel
+    ./build
+    cp target/kernel.bin ../bin/esp/kernel
+    cd ..
+
+    if command_exists python; then
+        python check_header.py bin/esp/kernel
+    elif command_exists python3; then
+        python3 check_header.py bin/esp/kernel
     else
-        cargo build
-        cp target/x86_64-unknown-uefi/debug/lemoncake-bootloader.efi bin/esp/efi/boot/bootx64.efi
-        cd kernel
-        ./build
-        cp target/kernel.bin ../bin/esp/kernel
-        cd ..
+        echo "Python not installed. Skipping header check..."
     fi
 
     #if [ linker.ld -nt bin/kernel.bin ] || [ bin/boot.o -nt bin/kernel.bin ] || [ bin/liblemoncake.a -nt bin/kernel.bin ] || [ bin/kernel.bin -nt lemoncake.iso ] || [ grub.cfg -nt lemoncake.iso ]; then
@@ -69,7 +60,7 @@ function run() {
     if [ ! -f bin/OVMF.fd ]; then
         cp /usr/share/OVMF/x64/OVMF.fd bin/OVMF.fd
     fi
-    qemu-system-x86_64 -enable-kvm -bios bin/OVMF.fd -drive format=raw,file=fat:rw:bin/esp -m 256M -serial stdio -D qemu_log.log -d in_asm,int,cpu_reset
+    qemu-system-x86_64 -enable-kvm -bios bin/OVMF.fd -drive format=raw,file=fat:rw:bin/esp -m 256M -D qemu_log.log -d in_asm,int,cpu_reset -cpu host -serial stdio
 }
 
 function clean() {

@@ -9,3 +9,4 @@ Cargo.lock
 *.sublime-workspace
 *.ttf
 qemu_log.log
+*.o

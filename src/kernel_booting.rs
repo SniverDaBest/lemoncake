@@ -1,5 +1,3 @@
-use crate::serial_println;
-
 #[derive(Debug, Clone, Copy)]
 #[repr(C, packed)]
 pub struct KernelHeader {
@@ -12,21 +10,20 @@ pub struct KernelHeader {
 }
 
 impl KernelHeader {
-    pub fn from_memory(ptr: *const u8) -> Self {
+    pub fn from_memory(ptr: *const u8) -> (Self, &'static str) {
         let hptr = ptr as *const KernelHeader;
         let header = unsafe { &*hptr };
+        let mut info = "";
 
         if header.magic != *b"kb00t!" {
             panic!("Invalid kernel magic!");
         }
 
         if header.revision != 1 {
-            serial_println!(
-                "WARNING: Using kernel with a boot revision other than 1. Things may not work!"
-            );
+            info = "WARNING: Using kernel with a boot revision other than 1. Things may not work!";
         }
 
-        return *header;
+        return (*header, info);
     }
 
     pub unsafe fn get_entry(
@@ -35,7 +32,8 @@ impl KernelHeader {
     ) -> (unsafe extern "C" fn(*mut u8) -> !, *const u8, *const u8) {
         let base_ptr = kernel_data.as_ptr();
         let entry_ptr = base_ptr.add(self.entry_offset as usize);
-        let func: unsafe extern "C" fn(*mut u8) -> ! = core::mem::transmute(entry_ptr);
-        return (func, base_ptr, entry_ptr);
+        let addr = *(entry_ptr as *const usize);
+        let func = core::mem::transmute::<usize, unsafe extern "C" fn(*mut u8) -> !>(addr);
+        return (func, self.entry_offset as *const u8, entry_ptr);
     }
 }

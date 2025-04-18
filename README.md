@@ -1,3 +1,6 @@
+>[!IMPORTANT]
+> This is the `uefi-testing` branch! If you couldn't tell, I'm working on UEFI stuff here.
+
 # Info
 Lemoncake is a small OS that's written in Rust, which was originally called `lemonade`. However, I have come to dislike that name, and dislike the rest of the codebase. So, it's been scrapped, and it's renamed.\
 \
@@ -17,9 +20,11 @@ To build, you will need the following:
 <!-- END OF LIST><!-->
 
 # Todo
-- [ ] Get running normally working *(aka `cargo run`)*
-- [ ] Optimize on memory *(i don't need to have all of those Strings and Vecs, could prob optimize them.)*
 - [ ] Kernel
+    - [X] Get it to figure out where the kernel is
+    - [ ] Get it to not crash when loading the kernel
+    - [ ] Hand ACPI to kernel as an argument
+- [ ] Get running normally working *(aka `cargo run`)*
 - [ ] Text Rendering
 
 # License

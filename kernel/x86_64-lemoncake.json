@@ -10,7 +10,7 @@
     "linker": "ld",
     "linker-flavor": "ld",
     "panic-strategy": "abort",
-    "relocation-model": "static",
+    "relocation-model": "pic",
     "disable-redzone": true,
     "features": "-mmx,-sse,+soft-float",
     "rustc-abi": "x86-softfloat",

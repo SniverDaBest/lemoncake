@@ -11,6 +11,8 @@ x86_64 = "0.15.2"
 
 [profile.dev]
 panic = "abort"
+debug = true
 
 [profile.release]
 panic = "abort"
+debug = true

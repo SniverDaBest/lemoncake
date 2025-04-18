@@ -6,9 +6,7 @@ SECTIONS {
     .kboot_hdr : {
         KEEP(*(.kboot_hdr))
     }
-
-    _kmain_addr = kmain;
-
+    
     . = 0x1000;
     .text : {
         *(.text .text.*)
