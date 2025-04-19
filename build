@@ -38,24 +38,10 @@ function build() {
     else
         echo "Python not installed. Skipping header check..."
     fi
-
-    #if [ linker.ld -nt bin/kernel.bin ] || [ bin/boot.o -nt bin/kernel.bin ] || [ bin/liblemoncake.a -nt bin/kernel.bin ] || [ bin/kernel.bin -nt lemoncake.iso ] || [ grub.cfg -nt lemoncake.iso ]; then
-    #    ld -n -o bin/kernel.bin -T linker.ld bin/boot.o bin/liblemoncake.a
-    #    mkdir -p bin/iso/boot/grub
-    #
-    #    cp grub.cfg bin/iso/boot/grub/
-    #    cp bin/kernel.bin bin/iso/boot/
-    #
-    #    grub2-mkrescue -o lemoncake.iso bin/iso
-    #fi
 }
 
 function run() {
     build
-    #if [ ! -f hd.img ]; then
-    #    echo "Creating hard drive image..."
-    #    qemu-img create hd.img 128M
-    #fi
 
     if [ ! -f bin/OVMF.fd ]; then
         cp /usr/share/OVMF/x64/OVMF.fd bin/OVMF.fd

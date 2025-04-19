@@ -1,6 +1,10 @@
 #![no_std]
 #![no_main]
-#![allow(clippy::needless_return, unsafe_op_in_unsafe_fn)]
+#![allow(
+    clippy::needless_return,
+    clippy::missing_safety_doc,
+    unsafe_op_in_unsafe_fn
+)]
 
 extern crate alloc;
 
@@ -38,7 +42,6 @@ pub fn read_file(path: &str) -> FileSystemResult<Vec<u8>> {
 }
 
 #[entry]
-#[allow(mutable_transmutes, unreachable_code)]
 fn main() -> Status {
     helpers::init().unwrap();
 
@@ -74,7 +77,7 @@ fn main() -> Status {
     let _mmap = unsafe { exit_boot_services(MemoryType::LOADER_DATA) };
     serial_println!("...Done!\n");
 
-    if info != "" {
+    if info.is_empty() {
         serial_println!("{}", info);
     }
     serial_println!(
@@ -87,11 +90,7 @@ fn main() -> Status {
 
     serial_println!("Launching kernel...\n");
 
-    unsafe {
-        kmain(fb_addr);
-    }
-
-    panic!("Kernel returned!?");
+    unsafe { kmain(fb_addr) }
 }
 
 #[panic_handler]
