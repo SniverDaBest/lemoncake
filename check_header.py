@@ -29,7 +29,7 @@ else:
     correct = False
 
 if data[8:12] != b"\x00\x00\x00\x00":
-    entry_point = int.from_bytes(data[8:12], byteorder='big')
+    entry_point = int.from_bytes(data[8:12], byteorder='little')
     print(f"[✔] Found kernel entry point address: {entry_point:#010x}")
 else:
     print("[✘] Entry point address not found")
