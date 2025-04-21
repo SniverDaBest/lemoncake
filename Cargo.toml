@@ -1,6 +1,6 @@
 [package]
 name = "lemoncake-bootloader"
-version = "25.3.0-UEFI"
+version = "25.4.0-UEFI"
 edition = "2024"
 
 [dependencies]

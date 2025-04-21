@@ -38,7 +38,7 @@ pub fn read_file(path: &str) -> FileSystemResult<Vec<u8>> {
     let fs = boot::get_image_file_system(boot::image_handle())
         .expect("Unable to get image file system!");
     let mut fs = FileSystem::new(fs);
-    fs.read(path.as_ref())
+    return fs.read(path.as_ref());
 }
 
 #[entry]
@@ -77,9 +77,7 @@ fn main() -> Status {
     let _mmap = unsafe { exit_boot_services(MemoryType::LOADER_DATA) };
     serial_println!("...Done!\n");
 
-    if info.is_empty() {
-        serial_println!("{}", info);
-    }
+    if !info.is_empty() { serial_println!("{}", info); }
     serial_println!(
         "Entry Point located at {:X?} ({:X?})",
         base_entry_addr,
