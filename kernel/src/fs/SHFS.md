@@ -6,7 +6,7 @@ SHFS stands for *(and is a)* Super Horrible File System.
 
 Every partition with SHFS has a header at the beginning. Such header is as follows.
 
->[!INFO]
+>[!NOTE]
 > Field(s) with a `^` are volatile, and will change from time to time, and shouldn't be set/changed by the user/formatting utility, but rather the kernel.
 
 | Field         | Type       |
@@ -70,9 +70,9 @@ The `signature` field should always store `SHFS!` As bytes (`*b”SHFS!”`)
 
 The `name` field is for storing the name of the FS. Could be the partition name, or it could be something else.
 
-The `piece_sz` field is the size of each piece (in MB).
-
 The `rev` field is the revision of SHFS being used.
+
+The `piece_sz` field is the size of each piece (in MB).
 
 The `piece_count` field is self explanatory.
 
