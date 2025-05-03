@@ -1,6 +1,5 @@
 use super::Locked;
 use alloc::alloc::{GlobalAlloc, Layout};
-use core::sync::atomic::{AtomicBool, Ordering};
 use core::{
     mem,
     ptr::{self, NonNull},

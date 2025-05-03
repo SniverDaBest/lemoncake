@@ -1,0 +1,26 @@
+[package]
+name = "kernel"
+version = "25.4.0"
+edition = "2024"
+
+[dependencies]
+acpi = "5.2.0"
+ansi_rgb = "0.2.0"
+bootloader_api = "0.11.10"
+efs = "0.4.2"
+linked_list_allocator = "0.10.5"
+pic8259 = "0.11.0"
+rgb = "0.8.50"
+spin = "0.10.0"
+uart_16550 = "0.3.2"
+volatile = "0.2.6"
+x86_64 = "0.15.2"
+
+[dependencies.fontdue]
+version = "0.9.3"
+default-features = false
+features = ["hashbrown"]
+
+[dependencies.lazy_static]
+version = "1.5.0"
+features = ["spin_no_std"]

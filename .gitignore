@@ -1,5 +1,2 @@
-target/
-bin/
-Cargo.lock
-*.iso
+/target
 *.img

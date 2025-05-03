@@ -1,4 +1,4 @@
-use super::{Locked, align_up};
+use super::{align_up, Locked};
 use alloc::alloc::{GlobalAlloc, Layout};
 use core::{mem, ptr};
 

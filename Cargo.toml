@@ -1,35 +1,18 @@
 [package]
-name = "lemoncake"
-version = "25.3.0"
+name = "bootloader-testing"
+version = "0.1.0"
 edition = "2024"
 
-[lib]
-crate-type = ["staticlib"]
+[build-dependencies.kernel]
+path = "kernel"
+artifact = "bin"
+target = "x86_64-unknown-none"
+
+[build-dependencies]
+bootloader = "0.11.10"
 
 [dependencies]
-lazy_static = { version = "1.5.0", features = ["spin_no_std"] }
-linked_list_allocator = "0.10.5"
-multiboot2 = "0.23.1"
-pic8259 = "0.11.0"
-spin = "0.9.8"
-volatile = "0.2.6"
-x86_64 = "0.15.2"
-pc-keyboard = "0.8.0"
-conquer-once = { version = "0.4.0", default-features = false }
-bitfield-struct = "0.10.1"
+ovmf-prebuilt = "0.1.0-alpha.1"
 
-[dependencies.crossbeam-queue]
-version = "0.3.12"
-default-features = false
-features = ["alloc", "nightly"]
-
-[dependencies.futures-util]
-version = "0.3.4"
-default-features = false
-features = ["alloc"]
-
-[profile.dev]
-panic = "abort"
-
-[profile.release]
-panic = "abort"
+[workspace]
+members = ["kernel"]
