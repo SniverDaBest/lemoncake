@@ -1,3 +1,6 @@
+>[!CAUTION]
+> This is a scrapped branch! It's kept because uhh... it is.
+
 >[!IMPORTANT]
 > This is the `uefi-testing` branch! If you couldn't tell, I'm working on UEFI stuff here.
 
