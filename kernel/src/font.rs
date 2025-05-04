@@ -131,14 +131,14 @@ const CHARSET: [[u8; 8]; 128] = [
     [0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00]    // U+007F
 ];
 
-pub fn draw_char(x: usize, y: usize, c: char) {
+pub fn draw_char(x: usize, y: usize, c: char, color: (u8, u8, u8)) {
     let char_data = CHARSET[c as u8 as usize];
-    let mut color_data = [(0,0,0); 64]; // 8x8 = 64 pixels
+    let mut color_data = [(30,30,46); 64]; // 8x8 = 64 pixels
     
     for (row, byte) in char_data.iter().enumerate() {
         for bit in 0..8 {
             if (byte & (1 << bit)) != 0 {
-                color_data[row * 8 + (bit)] = (255, 255, 255);
+                color_data[row * 8 + (bit)] = color;
             }
         }
     }

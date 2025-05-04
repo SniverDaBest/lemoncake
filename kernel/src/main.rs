@@ -72,7 +72,7 @@ macro_rules! info {
             format_args!($($arg)*)
         );
         $crate::println!(
-            "(o_o) [INFO]: {}",
+            "\x1b[34m(o_o) [INFO]:\x1b[0m {}",
             format_args!($($arg)*)
         );
     };
@@ -87,7 +87,7 @@ macro_rules! warning {
             format_args!($($arg)*)
         );
         $crate::println!(
-            "(0_0) [WARNING]: {}",
+            "\x1b[33m(0_0) [WARNING]:\x1b[0m {}",
             format_args!($($arg)*)
         );
     };
@@ -102,7 +102,7 @@ macro_rules! error {
             format_args!($($arg)*)
         );
         $crate::println!(
-            "(X_X) [ERROR]: {}",
+            "\x1b[31m(X_X) [ERROR]:\x1b[0m {}",
             format_args!($($arg)*)
         );
     };
@@ -117,7 +117,7 @@ macro_rules! success {
             format_args!($($arg)*)
         );
         $crate::println!(
-            "(^_^) [SUCCESS]: {}",
+            "\x1b[32m(^_^) [SUCCESS]:\x1b[0m {}",
             format_args!($($arg)*)
         );
     };
@@ -132,7 +132,7 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     *TTY.lock() = Some(TTY::new());
 
     if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-        fb.clear_screen((0, 0, 0));
+        fb.clear_screen((30,30,46));
     }
 
     let pkg_ver = env!("CARGO_PKG_VERSION");

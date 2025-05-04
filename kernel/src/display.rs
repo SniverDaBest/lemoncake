@@ -1,6 +1,6 @@
 use bootloader_api::info::{FrameBuffer, PixelFormat};
 use core::fmt::{Write, self};
-use crate::{error, success, FRAMEBUFFER};
+use crate::{error, success, warning, FRAMEBUFFER};
 
 pub struct Framebuffer { pub fb: FrameBuffer }
 
@@ -114,6 +114,7 @@ pub struct TTY {
     text_buf: &'static mut [char],
     cursor_x: usize,
     cursor_y: usize,
+    fg_color: (u8, u8, u8),
 }
 
 impl TTY {
@@ -134,14 +135,15 @@ impl TTY {
             text_buf: buffer,
             cursor_x: 0,
             cursor_y: 0,
+            fg_color: (255,255,255),
         };
     }
 
-    pub fn set_char(&mut self, x: usize, y: usize, c: char) {
+    pub fn set_char(&mut self, x: usize, y: usize, c: char, color: (u8, u8, u8)) {
         if x >= self.width || y >= self.height {
             return;
         }
-        crate::font::draw_char(x*8,y*8, c);
+        crate::font::draw_char(x*8,y*8, c, color);
     }
 
     pub fn fill_tty(&mut self, c: char) {
@@ -155,7 +157,46 @@ impl TTY {
     }
 
     pub fn write_str(&mut self, s: &str) {
-        for c in s.chars() {
+        let mut chars = s.chars().peekable();
+        while let Some(c) = chars.next() {
+            if c == '\x1b' {
+                if chars.peek() == Some(&'[') {
+                    chars.next();
+                    let mut num_buf = [0u8; 3];
+                    let mut num_len = 0;
+                    while let Some(&d) = chars.peek() {
+                        if d >= '0' && d <= '9' && num_len < 3 {
+                            num_buf[num_len] = d as u8;
+                            num_len += 1;
+                            chars.next();
+                        } else {
+                            break;
+                        }
+                    }
+                    if chars.peek() == Some(&'m') {
+                        chars.next();
+                        if num_len > 0 {
+                            let code = core::str::from_utf8(&num_buf[..num_len]).unwrap_or("0");
+                            let code = code.parse::<u8>().unwrap_or(0);
+                            self.fg_color = match code {
+                                30 => (0,0,0),       // Black
+                                31 => (243,139,168),     // Red
+                                32 => (166,227,161),     // Green
+                                33 => (249,226,175),    // Yellow
+                                34 => (137,180,250),     // Blue
+                                35 => (203,166,247),   // Magenta
+                                36 => (0,170,170),   // Cyan
+                                37 => (255,255,255), // White
+                                0  => (205,214,244), // Reset
+                                _  => self.fg_color,
+                            };
+                        } else {
+                            self.fg_color = (205,214,244);
+                        }
+                        continue;
+                    }
+                }
+            }
             match c {
                 '\n' => {
                     self.cursor_x = 0;
@@ -165,16 +206,14 @@ impl TTY {
                     self.cursor_x = 0;
                 }
                 _ => {
-                    self.set_char(self.cursor_x, self.cursor_y, c);
+                    self.set_char(self.cursor_x, self.cursor_y, c, self.fg_color);
                     self.cursor_x += 1;
                 }
             }
-            
             if self.cursor_x >= self.width {
                 self.cursor_x = 0;
                 self.cursor_y += 1;
             }
-            
             if self.cursor_y >= self.height {
                 self.cursor_y = 0;
             }
