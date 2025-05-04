@@ -7,25 +7,25 @@ pub static VERSION: &str = "25m4";
 
 extern crate alloc;
 
-pub mod allocator;
 pub mod ahci;
+pub mod allocator;
 pub mod display;
 pub mod font;
 pub mod fs;
 pub mod gdt;
-pub mod pci;
 pub mod interrupts;
 pub mod memory;
+pub mod pci;
 pub mod serial;
 
-use alloc::vec::Vec;
 #[allow(unused_imports)]
-use ansi_rgb::{red, yellow, Foreground, WithForeground};
+use ansi_rgb::{Foreground, WithForeground, red, yellow};
 
-use bootloader_api::{entry_point, BootInfo};
 use bootloader_api::config::{BootloaderConfig, Mapping};
-use display::Framebuffer;
+use bootloader_api::{BootInfo, entry_point};
+use display::{Framebuffer, TTY};
 use memory::BootInfoFrameAllocator;
+use spinning_top::Spinlock;
 use x86_64::VirtAddr;
 
 pub static BOOTLOADER_CONFIG: BootloaderConfig = {
@@ -40,12 +40,39 @@ pub fn colorize(text: &str, color: rgb::Rgb<u8>) -> WithForeground<&str> {
     return text.fg(color);
 }
 
+pub static FRAMEBUFFER: Spinlock<Option<Framebuffer>> = Spinlock::new(None);
+pub static TTY: Spinlock<Option<TTY>> = Spinlock::new(None);
+
+#[macro_export]
+macro_rules! print {
+    ($($arg:tt)*) => {
+        if let Some(t) = $crate::TTY.lock().as_mut() {
+            use core::fmt::Write;
+            let _ = write!(t, "{}", format_args!($($arg)*));
+        } else {
+            $crate::serial_println!("No TTY available!");
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! println {
+    () => ($crate::print!("\n"));
+    ($fmt:expr) => ($crate::print!(concat!($fmt, "\n")));
+    ($fmt:expr, $($arg:tt)*) => ($crate::print!(
+        concat!($fmt, "\n"), $($arg)*));
+}
+
 #[macro_export]
 macro_rules! info {
     ($($arg:tt)*) => {
         $crate::serial_println!(
             "{} {}",
             $crate::colorize("(o_o) [INFO]:", ansi_rgb::blue()),
+            format_args!($($arg)*)
+        );
+        $crate::println!(
+            "(o_o) [INFO]: {}",
             format_args!($($arg)*)
         );
     };
@@ -59,6 +86,10 @@ macro_rules! warning {
             $crate::colorize("(0_0) [WARNING]:", ansi_rgb::yellow()),
             format_args!($($arg)*)
         );
+        $crate::println!(
+            "(0_0) [WARNING]: {}",
+            format_args!($($arg)*)
+        );
     };
 }
 
@@ -70,9 +101,14 @@ macro_rules! error {
             $crate::colorize("(X_X) [ERROR]:", ansi_rgb::red()),
             format_args!($($arg)*)
         );
+        $crate::println!(
+            "(X_X) [ERROR]: {}",
+            format_args!($($arg)*)
+        );
     };
 }
 
+#[macro_export]
 macro_rules! success {
     ($($arg:tt)*) => {
         $crate::serial_println!(
@@ -80,105 +116,75 @@ macro_rules! success {
             $crate::colorize("(^_^) [SUCCESS]:", ansi_rgb::green()),
             format_args!($($arg)*)
         );
+        $crate::println!(
+            "(^_^) [SUCCESS]: {}",
+            format_args!($($arg)*)
+        );
     };
 }
 
 fn kernel_main(info: &'static mut BootInfo) -> ! {
-    let ver = env!("CARGO_PKG_VERSION").split('.');
-    serial_print!("{} Running Lemoncake version ", colorize("(o_o) [INFO]:", ansi_rgb::blue()));
-    for x in ver {
-        serial_print!("{}.", x);
+    serial_print!("\x1B[2J\x1B[1;1H");
+
+    let blfb = info.framebuffer.take().expect("No framebuffer found!");
+    let fb = Framebuffer::new(blfb);
+    *FRAMEBUFFER.lock() = Some(fb);
+    *TTY.lock() = Some(TTY::new());
+
+    if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
+        fb.clear_screen((0, 0, 0));
     }
-    serial_println!();
+
+    let pkg_ver = env!("CARGO_PKG_VERSION");
+    info!(
+        "Running Lemoncake version {}",
+        pkg_ver
+    );
 
     warning!("This is a hobby project. Don't expect it to be stable, secure, or even work.");
-    
-    let blfb = info.framebuffer.take().expect("No framebuffer found!");
-    let mut fb = Framebuffer::new(blfb);
-    fb.clear_screen((0,0,0));
-    fb.put_pixel(1,0,(255,255,255));
-    fb.put_pixel(1,1,(255,255,255));
-    
-    fb.put_pixel(5,0,(255,255,255));
-    fb.put_pixel(5,1,(255,255,255));
-    
-    fb.put_pixel(0,4,(255,255,255));
-    fb.put_pixel(1,5,(255,255,255));
-    fb.put_pixel(2,5,(255,255,255));
-    fb.put_pixel(3,5,(255,255,255));
-    fb.put_pixel(4,5,(255,255,255));
-    fb.put_pixel(5,5,(255,255,255));
-    fb.put_pixel(6,4,(255,255,255));
-    
+
     info!("Initializing GDT, IDT, PICS, and enabling interrupts...");
     gdt::init();
     interrupts::init_idt();
-    unsafe { interrupts::PICS.lock().initialize(); }
+    unsafe {
+        interrupts::PICS.lock().initialize();
+    }
     x86_64::instructions::interrupts::enable();
-    
+
     info!("Initializing Heap...");
-    let pmo = info.physical_memory_offset.into_option().expect("No physical memory offset found!");
+    let pmo = info
+        .physical_memory_offset
+        .into_option()
+        .expect("No physical memory offset found!");
     let mut mapper = unsafe { memory::init(VirtAddr::new(pmo)) };
     let mut frame_allocator = unsafe { BootInfoFrameAllocator::init(&info.memory_regions) };
-    
+
     allocator::init_heap(&mut mapper, &mut frame_allocator).expect("Unable to initialize heap!");
-    
+
     info!("Looking for AHCI devices...");
     let ahci_devices = unsafe { ahci::find_ahci_devices(&mut mapper, &mut frame_allocator) };
     if ahci_devices.is_empty() {
         info!("No AHCI devices found.");
     } else {
         for mut device in ahci_devices {
-                info!("Found AHCI controller at {}:{}.{}", 
-                device.pci_device.bus, 
-                device.pci_device.device_id, 
-                device.pci_device.func
+            info!(
+                "Found AHCI controller at {}:{}.{}",
+                device.pci_device.bus, device.pci_device.device_id, device.pci_device.func
             );
-            
+
             for port in &device.ports {
                 if port.is_implemented {
                     info!("  Port {}: Type {}", port.port_number, port.port_type);
                 }
             }
-            device.init(&mut mapper, &mut frame_allocator).expect("Unable to initialize AHCI device!");
-            //ahci::test_ahci_read_write(&mut device);
+            device
+                .init(&mut mapper, &mut frame_allocator)
+                .expect("Unable to initialize AHCI device!");
         }
     }
 
     success!("Done setting up!");
     info!("TODO:\n- Font Rendering\n- Image Rendering\n- ACPI");
-
-    fb.put_pixel(70,69,(0,255,0));
-    fb.put_pixel(71,69,(0,255,0));
-    fb.put_pixel(72,69,(0,255,0));
-    fb.put_pixel(69,70,(0,255,0));
-    fb.put_pixel(69,71,(0,255,0));
-    fb.put_pixel(69,72,(0,255,0));
-    fb.put_pixel(69,73,(0,255,0));
-    fb.put_pixel(69,74,(0,255,0));
-    fb.put_pixel(70,75,(0,255,0));
-    fb.put_pixel(71,75,(0,255,0));
-    fb.put_pixel(72,75,(0,255,0));
-    fb.put_pixel(73,74,(0,255,0));
-    fb.put_pixel(73,73,(0,255,0));
-    fb.put_pixel(73,72,(0,255,0));
-    fb.put_pixel(73,71,(0,255,0));
-    fb.put_pixel(73,70,(0,255,0));
-
-    fb.put_pixel(75,69,(0,255,0));
-    fb.put_pixel(75,70,(0,255,0));
-    fb.put_pixel(75,71,(0,255,0));
-    fb.put_pixel(75,72,(0,255,0));
-    fb.put_pixel(75,73,(0,255,0));
-    fb.put_pixel(75,74,(0,255,0));
-    fb.put_pixel(75,75,(0,255,0));
-    fb.put_pixel(76,73,(0,255,0));
-    fb.put_pixel(77,72,(0,255,0));
-    fb.put_pixel(77,71,(0,255,0));
-    fb.put_pixel(77,70,(0,255,0));
-    fb.put_pixel(77,69,(0,255,0));
-    fb.put_pixel(77,74,(0,255,0));
-    fb.put_pixel(77,75,(0,255,0));
 
     loop {}
 }
@@ -193,11 +199,17 @@ pub fn hlt_loop() -> ! {
 #[cfg(target_os = "none")]
 #[panic_handler]
 fn panic_handler(_info: &core::panic::PanicInfo) -> ! {
-    error!("\nUh-oh! The Lemoncake kernel needed to panic.\nHere's what happened:\nPanic Message: {}\nLocation: {}@L{}:{}",
+    error!(
+        "\nUh-oh! The Lemoncake kernel needed to panic.\nHere's what happened:\nPanic Message: {}\nLocation: {}@L{}:{}",
         _info.message().fg(red()),
         _info.location().unwrap().file().fg(yellow()),
         _info.location().unwrap().line(),
-        _info.location().unwrap().column());
-    
+        _info.location().unwrap().column()
+    );
+
+    if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
+        fb.draw_sad_face(100, 0, (255, 0, 0));
+    }
+
     loop {}
 }

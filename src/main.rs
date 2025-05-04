@@ -12,16 +12,14 @@ fn main() {
     #[cfg(target_os = "windows")]
     let mut copy = std::process::Command::new("copy");
 
-    if uefi { copy.arg(up).arg("./target/uefi.img"); } else { copy.arg(bp).arg("./target/bios.img"); }
+    if uefi {
+        copy.arg(up).arg("./target/uefi.img");
+    } else {
+        copy.arg(bp).arg("./target/bios.img");
+    }
 
     let mut cpchild = copy.spawn().unwrap();
     cpchild.wait().unwrap();
-
-    let mut hdcmd = std::process::Command::new("qemu-img");
-    hdcmd.arg("create").arg("hd.img").arg("512M");
-
-    //let mut hdcmdchild = hdcmd.spawn().unwrap();
-    //hdcmdchild.wait().unwrap();
 
     let mut cmd = std::process::Command::new("qemu-system-x86_64");
 
@@ -35,8 +33,9 @@ fn main() {
     cmd.arg("-m").arg("1G");
     cmd.arg("-enable-kvm");
     cmd.arg("-serial").arg("stdio");
-    cmd.arg("-vga").arg("cirrus");
-    cmd.arg("-drive").arg("id=disk,file=hd.img,if=none,format=raw");
+    //cmd.arg("-vga").arg("cirrus");
+    cmd.arg("-drive")
+        .arg("id=disk,file=hd.img,if=none,format=raw");
     cmd.arg("-device").arg("ahci,id=ahci");
     cmd.arg("-device").arg("ide-hd,drive=disk,bus=ahci.0");
 

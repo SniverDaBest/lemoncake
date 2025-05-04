@@ -1,4 +1,4 @@
-use crate::{gdt, hlt_loop, info, error};
+use crate::{error, gdt, hlt_loop, info};
 use lazy_static::lazy_static;
 use pic8259::ChainedPics;
 use spin;
@@ -53,7 +53,12 @@ extern "x86-interrupt" fn page_fault_handler(
 ) {
     use x86_64::registers::control::Cr2;
 
-    error!("\nUh-oh! The Lemoncake kernel page-faulted.\nHere's what happened:\nAccessed Address: {:?}\nError Code: {:?}\nStack Frame:\n{:#?}", Cr2::read(), error_code, stack_frame);
+    error!(
+        "\nUh-oh! The Lemoncake kernel page-faulted.\nHere's what happened:\nAccessed Address: {:?}\nError Code: {:?}\nStack Frame:\n{:#?}",
+        Cr2::read(),
+        error_code,
+        stack_frame
+    );
 
     hlt_loop();
 }
@@ -62,7 +67,10 @@ extern "x86-interrupt" fn double_fault_handler(
     stack_frame: InterruptStackFrame,
     _error_code: u64,
 ) -> ! {
-    error!("\nUh-oh! The Lemoncake kernel double-faulted.\nHere's the stack frame:\n{:#?}", stack_frame);
+    error!(
+        "\nUh-oh! The Lemoncake kernel double-faulted.\nHere's the stack frame:\n{:#?}",
+        stack_frame
+    );
 
     loop {}
 }

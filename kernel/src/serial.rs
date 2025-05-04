@@ -39,3 +39,7 @@ macro_rules! serial_println {
     ($fmt:expr, $($arg:tt)*) => ($crate::serial_print!(
         concat!($fmt, "\n"), $($arg)*));
 }
+
+pub fn get_input() -> u8 {
+    return SERIAL1.lock().receive();
+}

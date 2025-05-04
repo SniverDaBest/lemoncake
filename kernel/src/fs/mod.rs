@@ -1,5 +1,4 @@
-//pub mod ext2;
-pub mod shfs;
+pub mod fat;
 
 #[derive(Debug)]
 pub enum FSError {
@@ -7,11 +6,18 @@ pub enum FSError {
     WriteError,
     MountError,
     UnmountError,
+    BadFS,
+    NotMounted,
+    AlreadyMounted,
+    NotADirectory,
+    NotAFile,
+    BadPath,
 }
 
 pub trait Filesystem {
     fn mount(&mut self) -> Result<(), FSError>;
     fn unmount(&mut self) -> Result<(), FSError>;
-    fn read(&mut self, buf: &mut [u8]) -> Result<usize, FSError>;
-    fn write(&mut self, buf: &[u8]) -> Result<(), FSError>;
+    fn read_file(&mut self, path: &str, buf: &mut [u8]) -> Result<usize, FSError>;
+    fn write_file(&mut self, path: &str, buf: &[u8]) -> Result<(), FSError>;
+    fn create_dir(&mut self, path: &str) -> Result<(), FSError>;
 }

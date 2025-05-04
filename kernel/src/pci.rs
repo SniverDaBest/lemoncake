@@ -42,7 +42,13 @@ impl fmt::Display for PCIDevice {
         write!(
             f,
             "Vendor ID: {} | Device ID: {} | Class code: {} | Subclass: {} | Bus: {} | Slot: {} | Func: {}",
-            self.vendor_id, self.device_id, self.class_code, self.subclass, self.bus, self.slot, self.func
+            self.vendor_id,
+            self.device_id,
+            self.class_code,
+            self.subclass,
+            self.bus,
+            self.slot,
+            self.func
         )
     }
 }

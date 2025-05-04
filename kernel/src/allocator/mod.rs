@@ -1,13 +1,13 @@
-use alloc::alloc::{GlobalAlloc, Layout};
-use core::ptr::null_mut;
-use bump::BumpAllocator;
-use x86_64::{
-    structures::paging::{
-        mapper::MapToError, FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB,
-    },
-    VirtAddr,
-};
 use crate::info;
+use alloc::alloc::{GlobalAlloc, Layout};
+use bump::BumpAllocator;
+use core::ptr::null_mut;
+use x86_64::{
+    VirtAddr,
+    structures::paging::{
+        FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB, mapper::MapToError,
+    },
+};
 
 pub mod bump;
 pub mod fixed_size_block;
@@ -37,7 +37,7 @@ pub fn init_heap(
             .ok_or(MapToError::FrameAllocationFailed)?;
         let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
         unsafe { mapper.map_to(page, frame, flags, frame_allocator)?.flush() };
-        if page.start_address().as_u64() % 104857600 as u64 == 0{
+        if page.start_address().as_u64() % 104857600 as u64 == 0 {
             info!("Mapping Page: {:#?}", page);
         }
     }
