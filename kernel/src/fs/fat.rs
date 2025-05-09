@@ -1,3 +1,5 @@
+#![allow(dead_code)]
+
 use super::{FSError, Filesystem};
 use crate::{ahci::AhciDevice, error, info};
 use alloc::{format, string::*, vec, vec::*};

@@ -1,4 +1,4 @@
-#![allow(dead_code)]
+#![allow(dead_code, private_interfaces)]
 
 use crate::pci::{PCIDevice, read_pci, write_pci};
 use crate::{error, info, serial_println};
@@ -10,11 +10,10 @@ use x86_64::{
     structures::paging::{FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB},
 };
 
-// Constants
-const SATA_SIG_ATA: u32 = 0x00000101; // SATA drive
-const SATA_SIG_ATAPI: u32 = 0xEB140101; // SATAPI drive
-const SATA_SIG_SEMB: u32 = 0xC33C0101; // Enclosure management bridge
-const SATA_SIG_PM: u32 = 0x96690101; // Port multiplier
+const SATA_SIG_ATA: u32 = 0x00000101; 
+const SATA_SIG_ATAPI: u32 = 0xEB140101; 
+const SATA_SIG_SEMB: u32 = 0xC33C0101; 
+const SATA_SIG_PM: u32 = 0x96690101; 
 
 const AHCI_DEV_NULL: i32 = 0;
 const AHCI_DEV_SATA: i32 = 1;
@@ -25,7 +24,7 @@ const AHCI_DEV_SATAPI: i32 = 4;
 const HBA_PORT_IPM_ACTIVE: u8 = 1;
 const HBA_PORT_DET_PRESENT: u8 = 3;
 
-const AHCI_BASE: u32 = 0x400000; // 4M
+const AHCI_BASE: u32 = 0x400000; 
 
 const HBA_PXCMD_ST: u32 = 0x0001;
 const HBA_PXCMD_FRE: u32 = 0x0010;
@@ -40,10 +39,10 @@ const ATA_CMD_WRITE_DMA_EX: u8 = 0x35;
 
 const SECTOR_SIZE: usize = 512;
 const AHCI_BASE_ADDR: u64 = 0x400000;
-const AHCI_MEMORY_SIZE: usize = 64 * 1024; // Increase to 64KB to ensure coverage
-const AHCI_PORT_OFFSET: usize = 0x8000; // Port structures start at 32KB offset
-const AHCI_CMD_LIST_SIZE: usize = 1024; // 1KB per port command list
-const AHCI_FIS_SIZE: usize = 256; // 256B per port FIS
+const AHCI_MEMORY_SIZE: usize = 64 * 1024; 
+const AHCI_PORT_OFFSET: usize = 0x8000; 
+const AHCI_CMD_LIST_SIZE: usize = 1024; 
+const AHCI_FIS_SIZE: usize = 256; 
 const AHCI_CMD_TABLE_SIZE: usize = 256;
 
 #[repr(u8)]
@@ -62,7 +61,7 @@ enum FisType {
 #[repr(C, packed)]
 struct FisRegH2D {
     fis_type: u8,
-    pmport_c: u8, // bit 7:4 = port multiplier, bit 0 = c
+    pmport_c: u8, 
     command: u8,
     featurel: u8,
     lba0: u8,
@@ -137,7 +136,7 @@ struct HbaPrdtEntry {
     dba: u32,
     dbau: u32,
     rsv0: u32,
-    dbc: u32, // Byte count, 4M max, interrupt = 1
+    dbc: u32, 
 }
 
 #[repr(C, packed)]
@@ -148,7 +147,6 @@ struct HbaCmdTbl {
     prdt_entry: [HbaPrdtEntry; 1],
 }
 
-// Main functionality
 impl HbaPort {
     fn check_type(&self) -> i32 {
         let ssts = self.ssts;
@@ -171,7 +169,7 @@ impl HbaPort {
     }
 
     fn start_cmd(&mut self) {
-        // Wait until CR is cleared
+
         while (self.cmd & HBA_PXCMD_CR) != 0 {}
 
         self.cmd |= HBA_PXCMD_FRE;
@@ -206,7 +204,7 @@ impl HbaPort {
         let cmd_slot = 0;
         let cmd_header =
             unsafe { &mut *((self.clb as usize + (cmd_slot << 7)) as *mut HbaCmdHeader) };
-        cmd_header.flags = 1 << 7; // Command FIS length = 5 DW, read from device
+        cmd_header.flags = 1 << 7; 
         cmd_header.prdtl = 1;
 
         let cmd_tbl = unsafe { &mut *((cmd_header.ctba as usize) as *mut HbaCmdTbl) };
@@ -224,12 +222,12 @@ impl HbaPort {
 
         let fis = unsafe { &mut *(cmd_tbl.cfis.as_ptr() as *mut FisRegH2D) };
         fis.fis_type = FisType::RegH2D as u8;
-        fis.pmport_c = 1 << 7; // Command
+        fis.pmport_c = 1 << 7; 
         fis.command = ATA_CMD_READ_DMA_EX;
         fis.lba0 = start as u8;
         fis.lba1 = (start >> 8) as u8;
         fis.lba2 = (start >> 16) as u8;
-        fis.device = 1 << 6; // LBA mode
+        fis.device = 1 << 6; 
         fis.lba3 = (start >> 24) as u8;
         fis.lba4 = (start >> 32) as u8;
         fis.lba5 = (start >> 40) as u8;
@@ -259,7 +257,7 @@ impl HbaPort {
         let cmd_slot = 0;
         let cmd_header =
             unsafe { &mut *((self.clb as usize + (cmd_slot << 7)) as *mut HbaCmdHeader) };
-        cmd_header.flags = (1 << 7) | (1 << 6); // Command FIS length = 5 DW, write to device
+        cmd_header.flags = (1 << 7) | (1 << 6); 
         cmd_header.prdtl = 1;
 
         let cmd_tbl = unsafe { &mut *((cmd_header.ctba as usize) as *mut HbaCmdTbl) };
@@ -277,12 +275,12 @@ impl HbaPort {
 
         let fis = unsafe { &mut *(cmd_tbl.cfis.as_ptr() as *mut FisRegH2D) };
         fis.fis_type = FisType::RegH2D as u8;
-        fis.pmport_c = 1 << 7; // Command
+        fis.pmport_c = 1 << 7; 
         fis.command = ATA_CMD_WRITE_DMA_EX;
         fis.lba0 = start as u8;
         fis.lba1 = (start >> 8) as u8;
         fis.lba2 = (start >> 16) as u8;
-        fis.device = 1 << 6; // LBA mode
+        fis.device = 1 << 6; 
         fis.lba3 = (start >> 24) as u8;
         fis.lba4 = (start >> 32) as u8;
         fis.lba5 = (start >> 40) as u8;
@@ -328,7 +326,6 @@ fn map_ahci_memory(
     let pages = (AHCI_MEMORY_SIZE + 0xFFF) / 0x1000;
     let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::NO_CACHE;
 
-    // Map the entire range at once
     for i in 0..pages {
         let page_addr = AHCI_BASE_ADDR + (i * 0x1000) as u64;
         let page = Page::containing_address(VirtAddr::new(page_addr));
@@ -397,13 +394,12 @@ pub struct AhciDevice {
     pub ports: Vec<AhciPort>,
 }
 
-// Add this new function
 fn init_port_with_timeout(port: &mut AhciPort) -> bool {
-    const TIMEOUT: u64 = 1_000_000; // 1 million cycles timeout
+    const TIMEOUT: u64 = 1_000_000; 
     let mut timeout = TIMEOUT;
 
     unsafe {
-        // Stop command engine
+
         (*port.hba_port).stop_cmd();
 
         while timeout > 0 && ((*port.hba_port).cmd & HBA_PXCMD_CR) != 0 {
@@ -414,10 +410,8 @@ fn init_port_with_timeout(port: &mut AhciPort) -> bool {
             }
         }
 
-        // Rebase port
         port_rebase(port.hba_port, port.port_number);
 
-        // Start command engine
         (*port.hba_port).start_cmd();
 
         timeout = TIMEOUT;
@@ -442,14 +436,12 @@ impl AhciDevice {
             return None;
         }
 
-        // Get ABAR (BAR5) from PCI config space
         let abar_phys = read_pci(0x24, &pci_device) & !0xF;
 
-        // Map ABAR to virtual memory
-        let pages = 256; // Map 1MB of MMIO space (adjust if needed)
+        let pages = 256; 
         let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::NO_CACHE;
 
-        let abar_virt = VirtAddr::new(0x_4000_0000); // Choose a free virtual address
+        let abar_virt = VirtAddr::new(0x_4000_0000); 
 
         for i in 0..pages {
             let page = Page::containing_address(abar_virt + (i * 0x1000));
@@ -504,17 +496,14 @@ impl AhciDevice {
     ) -> Result<(), MapToError<Size4KiB>> {
         info!("Starting AHCI device initialization...");
 
-        // Map AHCI memory region first
         map_ahci_memory(mapper, frame_allocator)?;
         info!("AHCI memory mapping completed");
 
-        // Enable PCI bus mastering and memory space
         let command = read_pci(0x04, &self.pci_device);
         info!("Current PCI command: 0x{:x}", command);
         write_pci(0x04, &self.pci_device, command | 0x6);
         info!("PCI bus mastering enabled");
 
-        // Set AHCI enable bit in GHC
         let ghc = unsafe { (*self.abar).ghc };
         info!("Current GHC: 0x{:x}", ghc);
         unsafe {
@@ -522,7 +511,6 @@ impl AhciDevice {
             info!("AHCI enabled in GHC: 0x{:x}", (*self.abar).ghc);
         }
 
-        // Initialize ports with timeout
         for port in &mut self.ports {
             if port.is_implemented && port.port_type == AHCI_DEV_SATA {
                 info!("Initializing port {}", port.port_number);
@@ -539,13 +527,12 @@ impl AhciDevice {
     }
 
     pub fn read_sector(&mut self, port_number: usize, lba: u64, buffer: &mut [u8]) -> bool {
-        // Validate buffer size
+
         if buffer.len() < SECTOR_SIZE {
             error!("Buffer too small for sector read");
             return false;
         }
 
-        // Find the specified port
         let port = match self.ports.iter_mut().find(|p| p.port_number == port_number) {
             Some(p) if p.port_type == AHCI_DEV_SATA => unsafe { &mut *p.hba_port },
             _ => {
@@ -554,7 +541,6 @@ impl AhciDevice {
             }
         };
 
-        // Perform the read
         if !port.read(lba, 1, &mut buffer[..SECTOR_SIZE]) {
             error!("Failed to read sector at LBA {}", lba);
             return false;
@@ -564,13 +550,12 @@ impl AhciDevice {
     }
 
     pub fn write_sector(&mut self, port_number: usize, lba: u64, buffer: &[u8]) -> bool {
-        // Validate buffer size
+
         if buffer.len() != SECTOR_SIZE {
             error!("Buffer not the correct size for sector write");
             return false;
         }
 
-        // Find the specified port
         let port = match self.ports.iter_mut().find(|p| p.port_number == port_number) {
             Some(p) if p.port_type == AHCI_DEV_SATA => unsafe { &mut *p.hba_port },
             _ => {
@@ -579,7 +564,6 @@ impl AhciDevice {
             }
         };
 
-        // Perform the read
         if !port.write(lba, 1, &buffer[..SECTOR_SIZE]) {
             error!("Failed to write sector at LBA {}", lba);
             return false;
@@ -606,12 +590,10 @@ pub unsafe fn find_ahci_devices(
     ahci_devices
 }
 
-// Update the port_rebase function
 fn port_rebase(port: *mut HbaPort, portno: usize) {
     unsafe {
         info!("Rebasing port {} at address {:p}", portno, port);
 
-        // Calculate base addresses
         let cmd_list_base = AHCI_BASE + (portno as u32 * AHCI_CMD_LIST_SIZE as u32);
         let fis_base =
             AHCI_BASE + (32 * AHCI_CMD_LIST_SIZE) as u32 + (portno as u32 * AHCI_FIS_SIZE as u32);
@@ -619,19 +601,15 @@ fn port_rebase(port: *mut HbaPort, portno: usize) {
         info!("Command list base: 0x{:x}", cmd_list_base);
         info!("FIS base: 0x{:x}", fis_base);
 
-        // Set command list base
         (*port).clb = cmd_list_base;
         (*port).clbu = 0;
 
-        // Set FIS base
         (*port).fb = fis_base;
         (*port).fbu = 0;
 
-        // Initialize command headers
         let cmdheader = (*port).clb as *mut HbaCmdHeader;
         core::ptr::write_bytes(cmdheader as *mut u8, 0, AHCI_CMD_LIST_SIZE);
 
-        // Set up command tables
         for i in 0..32 {
             (*cmdheader.add(i)).prdtl = 8;
             let cmd_table_base = AHCI_BASE
@@ -646,25 +624,21 @@ fn port_rebase(port: *mut HbaPort, portno: usize) {
 }
 
 pub fn test_ahci_read_write(device: &mut AhciDevice) {
-    // Create a test buffer
+
     let mut read_buffer = vec![0u8; SECTOR_SIZE];
     let write_buffer = vec![0xAAu8; SECTOR_SIZE];
 
-    // Test first available SATA port
     for port in &mut device.ports {
         if port.port_type == AHCI_DEV_SATA {
             info!("Testing SATA port {}", port.port_number);
 
-            // Try reading first sector
             let port = unsafe { &mut *port.hba_port };
             if port.read(0, 1, &mut read_buffer) {
                 info!("Successfully read first sector");
 
-                // Try writing test pattern to second sector
                 if port.write(1, 1, &write_buffer) {
                     info!("Successfully wrote test pattern");
 
-                    // Verify written data
                     if port.read(1, 1, &mut read_buffer) && read_buffer == write_buffer {
                         info!("Successfully verified written data");
                     } else {

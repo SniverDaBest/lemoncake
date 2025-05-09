@@ -1,4 +1,5 @@
 use core::ptr::addr_of;
+use core::sync::atomic::{AtomicU64, Ordering};
 use lazy_static::lazy_static;
 use x86_64::VirtAddr;
 use x86_64::structures::gdt::{Descriptor, GlobalDescriptorTable, SegmentSelector};
@@ -6,15 +7,35 @@ use x86_64::structures::tss::TaskStateSegment;
 
 pub const DOUBLE_FAULT_IST_INDEX: u16 = 0;
 
+static STACK_START: AtomicU64 = AtomicU64::new(0);
+static STACK_END: AtomicU64 = AtomicU64::new(0);
+
+pub fn tss_stack_bounds() -> (VirtAddr, VirtAddr) {
+    (
+        VirtAddr::new(STACK_START.load(Ordering::Relaxed)),
+        VirtAddr::new(STACK_END.load(Ordering::Relaxed)),
+    )
+}
+
 lazy_static! {
-    static ref TSS: TaskStateSegment = {
+    pub static ref TSS: TaskStateSegment = {
         let mut tss = TaskStateSegment::new();
         tss.interrupt_stack_table[DOUBLE_FAULT_IST_INDEX as usize] = {
-            const STACK_SIZE: usize = 4096 * 5;
-            static mut STACK: [u8; STACK_SIZE] = [0; STACK_SIZE];
+            pub const STACK_SIZE: usize = 4096 * 5;
 
-            let stack_start = VirtAddr::from_ptr(addr_of!(STACK));
+            #[repr(align(16))]
+            pub struct Stack([u8; STACK_SIZE]);
+
+            pub static mut STACK: Stack = Stack([0; STACK_SIZE]);
+
+            let x = unsafe { STACK.0 };
+
+            let stack_start = VirtAddr::from_ptr(addr_of!(x));
             let stack_end = stack_start + STACK_SIZE as u64;
+
+            STACK_START.store(stack_start.as_u64(), Ordering::Relaxed);
+            STACK_END.store(stack_end.as_u64(), Ordering::Relaxed);
+
             stack_end
         };
         tss

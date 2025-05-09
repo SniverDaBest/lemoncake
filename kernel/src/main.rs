@@ -1,19 +1,30 @@
 #![no_std]
 #![no_main]
-#![feature(core_intrinsics, abi_x86_interrupt)]
+#![feature(core_intrinsics, abi_x86_interrupt, panic_can_unwind)]
 #![allow(unsafe_op_in_unsafe_fn, internal_features, clippy::needless_return)]
 
-pub static VERSION: &str = "25m4";
+/* TODO:
+ * ACPI
+ * Support regular PICS
+ * Commandline with feature-set similar (or equal) to the old lemoncake version
+ * Usermode
+ * Support running apps (in usermode)
+ * Support external drivers
+ * A C/C++ library (like glibc or musl)
+ */
 
 extern crate alloc;
 
 pub mod ahci;
 pub mod allocator;
+pub mod commandline;
 pub mod display;
+pub mod executor;
 pub mod font;
 pub mod fs;
 pub mod gdt;
 pub mod interrupts;
+pub mod keyboard;
 pub mod memory;
 pub mod pci;
 pub mod serial;
@@ -23,10 +34,14 @@ use ansi_rgb::{Foreground, WithForeground, red, yellow};
 
 use bootloader_api::config::{BootloaderConfig, Mapping};
 use bootloader_api::{BootInfo, entry_point};
+use core::fmt::{Arguments, Write};
 use display::{Framebuffer, TTY};
 use memory::BootInfoFrameAllocator;
 use spinning_top::Spinlock;
-use x86_64::VirtAddr;
+use x86_64::{
+    VirtAddr,
+    structures::paging::{Mapper, Page},
+};
 
 pub static BOOTLOADER_CONFIG: BootloaderConfig = {
     let mut config = BootloaderConfig::new_default();
@@ -43,86 +58,6 @@ pub fn colorize(text: &str, color: rgb::Rgb<u8>) -> WithForeground<&str> {
 pub static FRAMEBUFFER: Spinlock<Option<Framebuffer>> = Spinlock::new(None);
 pub static TTY: Spinlock<Option<TTY>> = Spinlock::new(None);
 
-#[macro_export]
-macro_rules! print {
-    ($($arg:tt)*) => {
-        if let Some(t) = $crate::TTY.lock().as_mut() {
-            use core::fmt::Write;
-            let _ = write!(t, "{}", format_args!($($arg)*));
-        } else {
-            $crate::serial_println!("No TTY available!");
-        }
-    };
-}
-
-#[macro_export]
-macro_rules! println {
-    () => ($crate::print!("\n"));
-    ($fmt:expr) => ($crate::print!(concat!($fmt, "\n")));
-    ($fmt:expr, $($arg:tt)*) => ($crate::print!(
-        concat!($fmt, "\n"), $($arg)*));
-}
-
-#[macro_export]
-macro_rules! info {
-    ($($arg:tt)*) => {
-        $crate::serial_println!(
-            "{} {}",
-            $crate::colorize("(o_o) [INFO]:", ansi_rgb::blue()),
-            format_args!($($arg)*)
-        );
-        $crate::println!(
-            "\x1b[34m(o_o) [INFO]:\x1b[0m {}",
-            format_args!($($arg)*)
-        );
-    };
-}
-
-#[macro_export]
-macro_rules! warning {
-    ($($arg:tt)*) => {
-        $crate::serial_println!(
-            "{} {}",
-            $crate::colorize("(0_0) [WARNING]:", ansi_rgb::yellow()),
-            format_args!($($arg)*)
-        );
-        $crate::println!(
-            "\x1b[33m(0_0) [WARNING]:\x1b[0m {}",
-            format_args!($($arg)*)
-        );
-    };
-}
-
-#[macro_export]
-macro_rules! error {
-    ($($arg:tt)*) => {
-        $crate::serial_println!(
-            "{} {}",
-            $crate::colorize("(X_X) [ERROR]:", ansi_rgb::red()),
-            format_args!($($arg)*)
-        );
-        $crate::println!(
-            "\x1b[31m(X_X) [ERROR]:\x1b[0m {}",
-            format_args!($($arg)*)
-        );
-    };
-}
-
-#[macro_export]
-macro_rules! success {
-    ($($arg:tt)*) => {
-        $crate::serial_println!(
-            "{} {}",
-            $crate::colorize("(^_^) [SUCCESS]:", ansi_rgb::green()),
-            format_args!($($arg)*)
-        );
-        $crate::println!(
-            "\x1b[32m(^_^) [SUCCESS]:\x1b[0m {}",
-            format_args!($($arg)*)
-        );
-    };
-}
-
 fn kernel_main(info: &'static mut BootInfo) -> ! {
     serial_print!("\x1B[2J\x1B[1;1H");
 
@@ -132,26 +67,15 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     *TTY.lock() = Some(TTY::new());
 
     if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-        fb.clear_screen((30,30,46));
+        fb.clear_screen((30, 30, 46));
     }
 
     let pkg_ver = env!("CARGO_PKG_VERSION");
-    info!(
-        "Running Lemoncake version {}",
-        pkg_ver
-    );
+    info!("Running Lemoncake version {}", pkg_ver);
 
     warning!("This is a hobby project. Don't expect it to be stable, secure, or even work.");
 
-    info!("Initializing GDT, IDT, PICS, and enabling interrupts...");
-    gdt::init();
-    interrupts::init_idt();
-    unsafe {
-        interrupts::PICS.lock().initialize();
-    }
-    x86_64::instructions::interrupts::enable();
-
-    info!("Initializing Heap...");
+    info!("Getting mapping & frame allocator...");
     let pmo = info
         .physical_memory_offset
         .into_option()
@@ -159,7 +83,30 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     let mut mapper = unsafe { memory::init(VirtAddr::new(pmo)) };
     let mut frame_allocator = unsafe { BootInfoFrameAllocator::init(&info.memory_regions) };
 
+    info!("Initializing GDT...");
+    gdt::init();
+
+    info!("Verifying TSS stack mapping...");
+    let (stack_start, stack_end) = gdt::tss_stack_bounds();
+    for addr in (stack_start.as_u64()..stack_end.as_u64()).step_by(0x1000) {
+        let page: Page = Page::containing_address(VirtAddr::new(addr));
+        if mapper.translate_page(page).is_err() {
+            panic!("TSS stack page at {:#X} is not mapped!", addr);
+        }
+    }
+
+    info!("Setting up PICS/APIC...");
+    unsafe {
+        interrupts::disable_pics();
+        interrupts::setup_pics(&mut mapper, &mut frame_allocator);
+    }
+
+    info!("Initializing heap...");
     allocator::init_heap(&mut mapper, &mut frame_allocator).expect("Unable to initialize heap!");
+
+    info!("Initializing IDT and enabling interrupts...");
+    interrupts::init_idt();
+    x86_64::instructions::interrupts::enable();
 
     info!("Looking for AHCI devices...");
     let ahci_devices = unsafe { ahci::find_ahci_devices(&mut mapper, &mut frame_allocator) };
@@ -184,7 +131,6 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     }
 
     success!("Done setting up!");
-    info!("TODO:\n- Font Rendering\n- Image Rendering\n- ACPI");
 
     loop {}
 }
@@ -196,20 +142,124 @@ pub fn hlt_loop() -> ! {
     }
 }
 
+#[macro_export]
+macro_rules! tty_print {
+    ($($arg:tt)*) => {
+        if let Some(t) = $crate::TTY.lock().as_mut() {
+            use core::fmt::Write;
+            let _ = write!(t, "{}", format_args!($($arg)*));
+        } else {
+            $crate::serial_println!("No TTY available!");
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! tty_println {
+    () => ($crate::tty_print!("\n"));
+    ($fmt:expr) => ($crate::tty_print!(concat!($fmt, "\n")));
+    ($fmt:expr, $($arg:tt)*) => ($crate::tty_print!(
+        concat!($fmt, "\n"), $($arg)*));
+}
+
+#[doc(hidden)]
+pub fn _print(args: Arguments) {
+    if let Some(t) = TTY.lock().as_mut() {
+        let _ = write!(t, "{}", args);
+    }
+    x86_64::instructions::interrupts::without_interrupts(|| {
+        serial::SERIAL1
+            .lock()
+            .write_fmt(args)
+            .expect("Printing to serial failed");
+    });
+}
+
+#[macro_export]
+macro_rules! print {
+    ($($arg:tt)*) => {
+        $crate::_print(format_args!($($arg)*))
+    };
+}
+
+#[macro_export]
+macro_rules! println {
+    () => ($crate::print!("\n"));
+    ($fmt:expr) => ($crate::print!(concat!($fmt, "\n")));
+    ($fmt:expr, $($arg:tt)*) => ($crate::print!(
+        concat!($fmt, "\n"), $($arg)*));
+}
+
+#[macro_export]
+macro_rules! info {
+    ($($arg:tt)*) => {
+        $crate::println!(
+            "\x1b[34m(o_o) [INFO]:\x1b[0m {}",
+            format_args!($($arg)*)
+        )
+    };
+}
+
+#[macro_export]
+macro_rules! warning {
+    ($($arg:tt)*) => {
+        $crate::println!(
+            "\x1b[33m(0_0) [WARNING]:\x1b[0m {}",
+            format_args!($($arg)*)
+        )
+    };
+}
+
+#[macro_export]
+macro_rules! error {
+    ($($arg:tt)*) => {
+        $crate::println!(
+            "\x1b[31m(X_X) [ERROR]:\x1b[0m {}",
+            format_args!($($arg)*)
+        )
+    };
+}
+
+#[macro_export]
+macro_rules! success {
+    ($($arg:tt)*) => {
+        $crate::println!(
+            "\x1b[32m(^_^) [SUCCESS]:\x1b[0m {}",
+            format_args!($($arg)*)
+        )
+    };
+}
+
+#[macro_export]
+macro_rules! sad {
+    ($($arg:tt)*) => {
+        if let Some(tty) = $crate::TTY.lock().as_mut() {
+            tty.sad(Some((243, 139, 168)));
+        }
+    };
+}
+
+#[macro_export]
+macro_rules! yay {
+    ($($arg:tt)*) => {
+        if let Some(tty) = $crate::TTY.lock().as_mut() {
+            tty.yay(Some(166, 227, 161));
+        }
+    };
+}
+
 #[cfg(target_os = "none")]
 #[panic_handler]
 fn panic_handler(_info: &core::panic::PanicInfo) -> ! {
     error!(
-        "\nUh-oh! The Lemoncake kernel needed to panic.\nHere's what happened:\nPanic Message: {}\nLocation: {}@L{}:{}",
-        _info.message().fg(red()),
-        _info.location().unwrap().file().fg(yellow()),
+        "\nUh-oh! The Lemoncake kernel needed to panic.\nHere's what happened:\nPanic Message: \x1b[31m{}\x1b[0m\nLocation: \x1b[33m{}@L{}:{}\x1b[0m",
+        _info.message(),
+        _info.location().unwrap().file(),
         _info.location().unwrap().line(),
         _info.location().unwrap().column()
     );
 
-    if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-        fb.draw_sad_face(100, 0, (255, 0, 0));
-    }
+    sad!();
 
     loop {}
 }

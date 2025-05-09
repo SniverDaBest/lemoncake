@@ -33,7 +33,6 @@ fn main() {
     cmd.arg("-m").arg("1G");
     cmd.arg("-enable-kvm");
     cmd.arg("-serial").arg("stdio");
-    //cmd.arg("-vga").arg("cirrus");
     cmd.arg("-drive")
         .arg("id=disk,file=hd.img,if=none,format=raw");
     cmd.arg("-device").arg("ahci,id=ahci");

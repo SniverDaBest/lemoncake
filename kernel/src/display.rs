@@ -1,14 +1,14 @@
+use crate::FRAMEBUFFER;
 use bootloader_api::info::{FrameBuffer, PixelFormat};
-use core::fmt::{Write, self};
-use crate::{error, success, warning, FRAMEBUFFER};
+use core::fmt::{self, Write};
 
-pub struct Framebuffer { pub fb: FrameBuffer }
+pub struct Framebuffer {
+    pub fb: FrameBuffer,
+}
 
 impl Framebuffer {
     pub fn new(fb: FrameBuffer) -> Self {
-        Framebuffer {
-            fb,
-        }
+        Framebuffer { fb }
     }
 
     pub fn put_pixel(&mut self, x: usize, y: usize, color: (u8, u8, u8)) {
@@ -69,36 +69,36 @@ impl Framebuffer {
 
     pub fn draw_smiley(&mut self, x: usize, y: usize, color: (u8, u8, u8)) {
         // left eye
-        self.put_pixel(x+1,y,color);
-        self.put_pixel(x+1,y+1,color); 
+        self.put_pixel(x + 1, y, color);
+        self.put_pixel(x + 1, y + 1, color);
         // right eye
-        self.put_pixel(x+5,y,color);
-        self.put_pixel(x+5,y+1,color);
+        self.put_pixel(x + 5, y, color);
+        self.put_pixel(x + 5, y + 1, color);
         // mouth
-        self.put_pixel(x+0,y+4,color);
-        self.put_pixel(x+1,y+5,color);
-        self.put_pixel(x+2,y+5,color);
-        self.put_pixel(x+3,y+5,color);
-        self.put_pixel(x+4,y+5,color);
-        self.put_pixel(x+5,y+5,color);
-        self.put_pixel(x+6,y+4,color);
+        self.put_pixel(x + 0, y + 4, color);
+        self.put_pixel(x + 1, y + 5, color);
+        self.put_pixel(x + 2, y + 5, color);
+        self.put_pixel(x + 3, y + 5, color);
+        self.put_pixel(x + 4, y + 5, color);
+        self.put_pixel(x + 5, y + 5, color);
+        self.put_pixel(x + 6, y + 4, color);
     }
 
     pub fn draw_sad_face(&mut self, x: usize, y: usize, color: (u8, u8, u8)) {
         // left eye
-        self.put_pixel(x+1,y,color);
-        self.put_pixel(x+1,y+1,color); 
+        self.put_pixel(x + 1, y, color);
+        self.put_pixel(x + 1, y + 1, color);
         // right eye
-        self.put_pixel(x+5,y,color);
-        self.put_pixel(x+5,y+1,color);
+        self.put_pixel(x + 5, y, color);
+        self.put_pixel(x + 5, y + 1, color);
         // mouth
-        self.put_pixel(x+0,y+5,color);
-        self.put_pixel(x+1,y+4,color);
-        self.put_pixel(x+2,y+4,color);
-        self.put_pixel(x+3,y+4,color);
-        self.put_pixel(x+4,y+4,color);
-        self.put_pixel(x+5,y+4,color);
-        self.put_pixel(x+6,y+5,color);
+        self.put_pixel(x + 0, y + 5, color);
+        self.put_pixel(x + 1, y + 4, color);
+        self.put_pixel(x + 2, y + 4, color);
+        self.put_pixel(x + 3, y + 4, color);
+        self.put_pixel(x + 4, y + 4, color);
+        self.put_pixel(x + 5, y + 4, color);
+        self.put_pixel(x + 6, y + 5, color);
     }
 
     pub fn resolution(&self) -> (usize, usize) {
@@ -125,17 +125,16 @@ impl TTY {
         }
         let width = width / 8;
         let height = height / 8;
-        
-        // Safety: This is safe because we only create one TTY instance
+
         let buffer = unsafe { &mut TTY_BUFFER[..] };
-        
+
         return Self {
             width,
             height,
             text_buf: buffer,
             cursor_x: 0,
             cursor_y: 0,
-            fg_color: (255,255,255),
+            fg_color: (255, 255, 255),
         };
     }
 
@@ -143,7 +142,7 @@ impl TTY {
         if x >= self.width || y >= self.height {
             return;
         }
-        crate::font::draw_char(x*8,y*8, c, color);
+        crate::font::draw_char(x * 8, y * 8, c, color);
     }
 
     pub fn fill_tty(&mut self, c: char) {
@@ -179,19 +178,19 @@ impl TTY {
                             let code = core::str::from_utf8(&num_buf[..num_len]).unwrap_or("0");
                             let code = code.parse::<u8>().unwrap_or(0);
                             self.fg_color = match code {
-                                30 => (0,0,0),       // Black
-                                31 => (243,139,168),     // Red
-                                32 => (166,227,161),     // Green
-                                33 => (249,226,175),    // Yellow
-                                34 => (137,180,250),     // Blue
-                                35 => (203,166,247),   // Magenta
-                                36 => (0,170,170),   // Cyan
-                                37 => (255,255,255), // White
-                                0  => (205,214,244), // Reset
-                                _  => self.fg_color,
+                                30 => (0, 0, 0),       // Black
+                                31 => (243, 139, 168), // Red
+                                32 => (166, 227, 161), // Green
+                                33 => (249, 226, 175), // Yellow
+                                34 => (137, 180, 250), // Blue
+                                35 => (203, 166, 247), // Magenta
+                                36 => (0, 170, 170),   // Cyan
+                                37 => (255, 255, 255), // White
+                                0 => (205, 214, 244),  // Reset
+                                _ => self.fg_color,
                             };
                         } else {
-                            self.fg_color = (205,214,244);
+                            self.fg_color = (205, 214, 244);
                         }
                         continue;
                     }
@@ -210,6 +209,40 @@ impl TTY {
                     self.cursor_x += 1;
                 }
             }
+            if self.cursor_x >= self.width {
+                self.cursor_x = 0;
+                self.cursor_y += 1;
+            }
+            if self.cursor_y >= self.height {
+                self.cursor_y = 0;
+            }
+        }
+    }
+
+    pub fn get_cur_loc(&mut self) -> (usize, usize) {
+        return (self.cursor_x * 8, self.cursor_y * 8);
+    }
+
+    pub fn yay(&mut self, color: Option<(u8, u8, u8)>) {
+        let (x, y) = self.get_cur_loc();
+        if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
+            fb.draw_smiley(x, y, color.unwrap_or(self.fg_color));
+            self.cursor_x += 1;
+            if self.cursor_x >= self.width {
+                self.cursor_x = 0;
+                self.cursor_y += 1;
+            }
+            if self.cursor_y >= self.height {
+                self.cursor_y = 0;
+            }
+        }
+    }
+
+    pub fn sad(&mut self, color: Option<(u8, u8, u8)>) {
+        let (x, y) = self.get_cur_loc();
+        if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
+            fb.draw_sad_face(x, y, color.unwrap_or(self.fg_color));
+            self.cursor_x += 1;
             if self.cursor_x >= self.width {
                 self.cursor_x = 0;
                 self.cursor_y += 1;
