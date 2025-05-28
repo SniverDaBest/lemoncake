@@ -151,10 +151,6 @@ impl TTY {
         }
     }
 
-    pub fn clear_tty(&mut self) {
-        self.fill_tty(' ');
-    }
-
     pub fn write_str(&mut self, s: &str) {
         let mut chars = s.chars().peekable();
         while let Some(c) = chars.next() {

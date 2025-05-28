@@ -6,6 +6,7 @@ use x86_64::structures::gdt::{Descriptor, GlobalDescriptorTable, SegmentSelector
 use x86_64::structures::tss::TaskStateSegment;
 
 pub const DOUBLE_FAULT_IST_INDEX: u16 = 0;
+pub const TIMER_IST_INDEX: u16 = 1;
 
 static STACK_START: AtomicU64 = AtomicU64::new(0);
 static STACK_END: AtomicU64 = AtomicU64::new(0);
@@ -36,6 +37,16 @@ lazy_static! {
             STACK_START.store(stack_start.as_u64(), Ordering::Relaxed);
             STACK_END.store(stack_end.as_u64(), Ordering::Relaxed);
 
+            stack_end
+        };
+        tss.interrupt_stack_table[TIMER_IST_INDEX as usize] = {
+            pub const STACK_SIZE: usize = 4096 * 5;
+            #[repr(align(16))]
+            pub struct Stack([u8; STACK_SIZE]);
+            pub static mut STACK: Stack = Stack([0; STACK_SIZE]);
+            let x = unsafe { STACK.0 };
+            let stack_start = VirtAddr::from_ptr(addr_of!(x));
+            let stack_end = stack_start + STACK_SIZE as u64;
             stack_end
         };
         tss

@@ -1,6 +1,6 @@
 #![allow(dead_code)]
 
-use super::{FSError, Filesystem};
+use super::*;
 use crate::{ahci::AhciDevice, error, info};
 use alloc::{format, string::*, vec, vec::*};
 
@@ -23,29 +23,60 @@ impl DirEntry {
     }
 }
 
-pub fn split_path(path: &str) -> Vec<&str> {
-    return path
-        .trim_start_matches('/')
-        .split('/')
-        .filter(|p| !p.is_empty())
-        .collect();
-}
-
 pub struct FAT<'a> {
     device: &'a mut AhciDevice,
     mounted: bool,
     current_cluster: u32,
 
+    /* DOS 2.0 BPB */
     bytes_per_sector: u16,
     sectors_per_cluster: u8,
     reserved_sectors: u16,
     num_fats: u8,
+    root_dir_ents: u16,
+    total_secs: u16,
+    media_desc: u8,
     sectors_per_fat: u32,
+
+    /* DOS 3.31 BPB */
+    secs_per_track: u16,
+    num_heads: u16,
+    hidden_secs: u32,
+    ltotal_secs: u32,
+
+    /* DOS 3.4 EBPB */
+    pdn: u8,
+    flags: u8,
+    ebs: u8,
+    vol_serial_num: u32,
+
+    /* DOS 7.1 EBPB */
+    log_secs_per_fat: u32,
+    mir_flags: u16,
+    ver: u16,
     root_cluster: u32,
+    fs_info_sec: u16,
+    bck_secs: u16,
     fat_start_sector: u64,
 }
 
 impl<'a> FAT<'a> {
+    pub fn new(device: &'a mut AhciDevice) -> Self {
+        return Self {
+            device,
+            mounted: false,
+            current_cluster: 0,
+
+            bytes_per_sector: 0,
+            sectors_per_cluster: 0,
+            reserved_sectors: 0,
+            num_fats: 0,
+            sectors_per_fat: 0,
+            root_cluster: 0,
+            fat_start_sector: 0,
+        };
+    }
+
     pub fn validate(&mut self) -> Result<(), FSError> {
         let mut buf = [0u8; 512];
         if self.device.read_sector(0, 0, &mut buf) == false {

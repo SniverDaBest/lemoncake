@@ -1,12 +1,12 @@
 #![no_std]
 #![no_main]
-#![feature(core_intrinsics, abi_x86_interrupt, panic_can_unwind)]
+#![feature(core_intrinsics, abi_x86_interrupt)]
 #![allow(unsafe_op_in_unsafe_fn, internal_features, clippy::needless_return)]
 
 /* TODO:
  * ACPI
- * Support regular PICS
- * Commandline with feature-set similar (or equal) to the old lemoncake version
+ * Fix APIC/PICS
+ * Commandline with feature-set similar (or equal) to the old Lemoncake version (see the main branch)
  * Usermode
  * Support running apps (in usermode)
  * Support external drivers
@@ -32,11 +32,14 @@ pub mod serial;
 #[allow(unused_imports)]
 use ansi_rgb::{Foreground, WithForeground, red, yellow};
 
+use crate::memory::BootInfoFrameAllocator;
 use bootloader_api::config::{BootloaderConfig, Mapping};
 use bootloader_api::{BootInfo, entry_point};
+use commandline::run_command_line;
+use core::error;
 use core::fmt::{Arguments, Write};
 use display::{Framebuffer, TTY};
-use memory::BootInfoFrameAllocator;
+use executor::{Executor, Task};
 use spinning_top::Spinlock;
 use x86_64::{
     VirtAddr,
@@ -96,10 +99,7 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     }
 
     info!("Setting up PICS/APIC...");
-    unsafe {
-        interrupts::disable_pics();
-        interrupts::setup_pics(&mut mapper, &mut frame_allocator);
-    }
+    error!("The PICS/APIC do NOT work. Therefore, things like the keyboard, disks, etc. will NOT work!");
 
     info!("Initializing heap...");
     allocator::init_heap(&mut mapper, &mut frame_allocator).expect("Unable to initialize heap!");
@@ -108,7 +108,7 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     interrupts::init_idt();
     x86_64::instructions::interrupts::enable();
 
-    info!("Looking for AHCI devices...");
+    info!("Looking for AHCI devices & SFS filesystems...");
     let ahci_devices = unsafe { ahci::find_ahci_devices(&mut mapper, &mut frame_allocator) };
     if ahci_devices.is_empty() {
         info!("No AHCI devices found.");
@@ -127,10 +127,18 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
             device
                 .init(&mut mapper, &mut frame_allocator)
                 .expect("Unable to initialize AHCI device!");
+
+            // we *would* scan for filesystems, but we don't have interrupts, so we can't do PCI, AHCI, etc.
         }
     }
 
     success!("Done setting up!");
+
+    warning!("The TTY doesn't accept keyboard input yet, so you have to use the serial for input.");
+
+    let mut e = Executor::new();
+    e.spawn(Task::new(run_command_line()));
+    e.run();
 
     loop {}
 }
@@ -164,15 +172,15 @@ macro_rules! tty_println {
 
 #[doc(hidden)]
 pub fn _print(args: Arguments) {
-    if let Some(t) = TTY.lock().as_mut() {
-        let _ = write!(t, "{}", args);
-    }
     x86_64::instructions::interrupts::without_interrupts(|| {
         serial::SERIAL1
             .lock()
             .write_fmt(args)
             .expect("Printing to serial failed");
     });
+    if let Some(t) = TTY.lock().as_mut() {
+        let _ = write!(t, "{}", args);
+    }
 }
 
 #[macro_export]
@@ -236,6 +244,7 @@ macro_rules! sad {
         if let Some(tty) = $crate::TTY.lock().as_mut() {
             tty.sad(Some((243, 139, 168)));
         }
+        $crate::serial_print!("☹");
     };
 }
 
@@ -243,9 +252,21 @@ macro_rules! sad {
 macro_rules! yay {
     ($($arg:tt)*) => {
         if let Some(tty) = $crate::TTY.lock().as_mut() {
-            tty.yay(Some(166, 227, 161));
+            tty.yay(Some((166, 227, 161)));
         }
+        $crate::serial_print!("☺");
     };
+}
+
+/// Clear the TTY
+#[macro_export]
+macro_rules! clear {
+    () => {{
+        $crate::serial_print!("\x1B[2J\x1B[1;1H");
+        if let Some(fb) = $crate::FRAMEBUFFER.lock().as_mut() {
+            fb.clear_screen((30, 30, 46));
+        }
+    }};
 }
 
 #[cfg(target_os = "none")]

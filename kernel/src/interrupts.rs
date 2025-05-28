@@ -15,6 +15,12 @@ pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
 const IA32_APIC_BASE_MSR: u32 = 0x1B;
 const IA32_APIC_BASE_MSR_ENABLE: u32 = 0x800;
 const APIC_EOI_OFFSET: usize = 0xB0;
+const APIC_SVR_OFFSET: usize = 0xF0;
+const APIC_LVT_TIMER_OFFSET: usize = 0x320;
+const APIC_TIMER_INITCNT_OFFSET: usize = 0x380;
+const APIC_TIMER_DIV_OFFSET: usize = 0x3E0;
+const APIC_TIMER_PERIODIC: u32 = 0x20000;
+const APIC_VIRT_BASE: u64 = 0xFFFF_FF00_0000_0000; // Chosen virtual address for APIC
 
 #[derive(Debug, Clone, Copy)]
 #[repr(u8)]
@@ -41,9 +47,9 @@ lazy_static! {
             idt.double_fault
                 .set_handler_fn(double_fault_handler)
                 .set_stack_index(gdt::DOUBLE_FAULT_IST_INDEX);
+            idt[InterruptIndex::Timer.as_u8()].set_handler_fn(timer_interrupt_handler).set_stack_index(gdt::TIMER_IST_INDEX);
         }
-        idt[0x20].set_handler_fn(timer_interrupt_handler);
-        idt[InterruptIndex::Keyboard.as_u8()].set_handler_fn(keyboard_interrupt_handler);
+        //idt[InterruptIndex::Keyboard.as_u8()].set_handler_fn(keyboard_interrupt_handler);
         idt
     };
 }
@@ -75,6 +81,10 @@ unsafe fn set_apic_base(apic: usize) {
 }
 
 unsafe fn get_apic_base() -> usize {
+    APIC_VIRT_BASE as usize
+}
+
+unsafe fn get_apic_phys_base() -> usize {
     let msr = Msr::new(IA32_APIC_BASE_MSR);
     let value = msr.read();
     let eax: u32 = value as u32;
@@ -95,10 +105,8 @@ unsafe fn write_reg(offset: usize, value: u32) {
     core::ptr::write_volatile(reg_ptr, value);
 }
 
-fn apic_eoi() {
-    unsafe {
-        write_reg(APIC_EOI_OFFSET, 0);
-    }
+unsafe fn apic_eoi() {
+    write_reg(0xB0, 0);
 }
 
 pub unsafe fn setup_pics(
@@ -111,19 +119,43 @@ pub unsafe fn setup_pics(
         info!("Using the APIC!");
         disable_pics();
 
-        let apic_base = get_apic_base();
-        let apic_frame = PhysFrame::containing_address(PhysAddr::new(apic_base as u64));
+        let apic_phys_base = get_apic_phys_base();
+        let apic_start_frame = PhysFrame::containing_address(PhysAddr::new(apic_phys_base as u64));
+        let apic_end_frame =
+            PhysFrame::containing_address(PhysAddr::new((apic_phys_base + 0xFFF) as u64));
+        let apic_start_page = Page::containing_address(VirtAddr::new(APIC_VIRT_BASE));
+        let apic_end_page = Page::containing_address(VirtAddr::new(APIC_VIRT_BASE + 0xFFF));
         let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
-        let page = Page::containing_address(VirtAddr::new(apic_base as u64));
-        unsafe {
+
+        for (page, frame) in Page::range_inclusive(apic_start_page, apic_end_page)
+            .zip(PhysFrame::range_inclusive(apic_start_frame, apic_end_frame))
+        {
+            info!(
+                "Mapping page: {:?} with flags {:?} on frame {:?}",
+                page, flags, frame
+            );
             mapper
-                .map_to(page, apic_frame, flags, frame_allocator)
+                .map_to(page, frame, flags, frame_allocator)
                 .expect("Unable to map the APIC memory region!")
                 .flush();
         }
 
-        set_apic_base(apic_base);
+        set_apic_base(apic_phys_base); // Still use the physical address for MSR
+
+        // Now all APIC register accesses use APIC_VIRT_BASE
         write_reg(0xF0, read_reg(0xF0) | 0x100);
+
+        let svr = read_reg(APIC_SVR_OFFSET);
+        write_reg(APIC_SVR_OFFSET, svr | 0x100 | (PIC_1_OFFSET as u32));
+
+        write_reg(APIC_TIMER_DIV_OFFSET, 0b0011);
+        write_reg(
+            APIC_LVT_TIMER_OFFSET,
+            APIC_TIMER_PERIODIC | (PIC_1_OFFSET as u32),
+        );
+        write_reg(APIC_TIMER_INITCNT_OFFSET, 10_000_000);
+
+        info!("APIC enabled and timer configured (uncalibrated)");
     } else {
         panic!("Please upgrade to a VM/Computer with APIC support!");
     }
@@ -167,13 +199,8 @@ extern "x86-interrupt" fn double_fault_handler(
 
 extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
     serial_print!(".");
-    if unsafe { check_apic() } {
+    unsafe {
         apic_eoi();
-    } else {
-        unsafe {
-            PICS.lock()
-                .notify_end_of_interrupt(InterruptIndex::Timer.as_u8());
-        }
     }
 }
 
