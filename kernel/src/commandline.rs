@@ -1,5 +1,5 @@
 use crate::{clear, error, print, println, sad, serial::get_input, warning, yay};
-use alloc::{format, string::*, vec::Vec, vec};
+use alloc::{format, string::*, vec, vec::Vec};
 use spinning_top::Spinlock;
 
 pub static COMMAND_REGISTRY: Spinlock<Option<CommandRegistry>> = Spinlock::new(None);
@@ -93,18 +93,24 @@ impl CommandRegistry {
             return None;
         }
         let cmd = self.search(input[0]);
-        if cmd.is_none() { return None; }
+        if cmd.is_none() {
+            return None;
+        }
         return Some((cmd.unwrap().func)(self, input[1..].to_vec()));
     }
 }
 
 fn license(_registry: &CommandRegistry, _args: Vec<&str>) -> i32 {
-    println!("Lemoncake is licensed under the 2-Clause (simplified) BSD License\n(c) SniverDaBest 2025");
+    println!(
+        "Lemoncake is licensed under the 2-Clause (simplified) BSD License\n(c) SniverDaBest 2025"
+    );
     return 0;
 }
 
 fn credits(_registry: &CommandRegistry, _args: Vec<&str>) -> i32 {
-    println!("Lemoncake is developed by SniverDaBest, and uses some external crates/libraries, most of which are developed by the Rust OSDev community.");
+    println!(
+        "Lemoncake is developed by SniverDaBest, and uses some external crates/libraries, most of which are developed by the Rust OSDev community."
+    );
     return 0;
 }
 
@@ -126,7 +132,9 @@ fn clear(_registry: &CommandRegistry, _args: Vec<&str>) -> i32 {
 }
 
 fn whoami(_registry: &CommandRegistry, _args: Vec<&str>) -> i32 {
-    println!("You're the user... why would you need to ask who you are? I feel like you should be able to figure that out by yourself. If you can't, then go see a doctor, or maybe go to the ER.");
+    println!(
+        "You're the user... why would you need to ask who you are? I feel like you should be able to figure that out by yourself. If you can't, then go see a doctor, or maybe go to the ER."
+    );
     return 0;
 }
 
@@ -140,14 +148,39 @@ fn panic_(_registry: &CommandRegistry, _args: Vec<&str>) -> i32 {
 }
 
 fn init_command_registry() -> CommandRegistry {
-    let license_cmd = Command::new("license", vec!["lic", "l"], "Displays the Lemoncake license and copyright information.", license);
-    let credits_cmd = Command::new("credits", vec!["cred", "c"], "Displays credits to the contributer(s) of Lemoncake.", credits);
-    let smiley_cmd = Command::new("smiley", vec!["yay", ":D", ":)"], "Prints a smiley face :)", smiley);
+    let license_cmd = Command::new(
+        "license",
+        vec!["lic", "l"],
+        "Displays the Lemoncake license and copyright information.",
+        license,
+    );
+    let credits_cmd = Command::new(
+        "credits",
+        vec!["cred", "c"],
+        "Displays credits to the contributer(s) of Lemoncake.",
+        credits,
+    );
+    let smiley_cmd = Command::new(
+        "smiley",
+        vec!["yay", ":D", ":)"],
+        "Prints a smiley face :)",
+        smiley,
+    );
     let sad_cmd = Command::new("sad", vec!["nay", "D:", ":("], "Prints a sad face :(", sad);
-    let clear_cmd = Command::new("clear", vec![ "claer", "clera", "cear"], "Clears the TTY.", clear);
+    let clear_cmd = Command::new(
+        "clear",
+        vec!["claer", "clera", "cear"],
+        "Clears the TTY.",
+        clear,
+    );
     let whoami_cmd = Command::new("whoami", vec![], "Tells you who you are.", whoami);
     let panic_cmd = Command::new("panic", vec![], "Panics the system.", panic_);
-    let help_cmd = Command::new("help", vec!["hlep", "h", "?"], "Displays this message.", help);
+    let help_cmd = Command::new(
+        "help",
+        vec!["hlep", "h", "?"],
+        "Displays this message.",
+        help,
+    );
 
     let mut reg = CommandRegistry::new();
     reg.push(license_cmd);
@@ -178,10 +211,12 @@ pub async fn run_command_line() {
         let c = get_input() as char;
         match c {
             '\x00' => {}
-            '\x08' => { input_buffer.pop(); },
+            '\x08' => {
+                input_buffer.pop();
+            }
             '\r' => {
                 print!("\n");
-                prev_ret_code = process_command(&input_buffer);
+                prev_ret_code = process_command(&input_buffer, prev_ret_code);
                 input_buffer.clear();
                 print!("[{}] > ", prev_ret_code);
             }
@@ -193,9 +228,13 @@ pub async fn run_command_line() {
     }
 }
 
-fn process_command(buf: &String) -> i32 {
-    if buf.trim().starts_with("#") || buf.trim().is_empty() {
+fn process_command(buf: &String, prev_ret_code: i32) -> i32 {
+    if buf.trim().starts_with("#") {
         return 0;
+    }
+
+    if buf.trim().is_empty() {
+        return prev_ret_code;
     }
 
     if COMMAND_REGISTRY.lock().is_none() {
@@ -203,10 +242,7 @@ fn process_command(buf: &String) -> i32 {
         return -2;
     }
 
-    let data: Vec<&str> = buf
-        .trim()
-        .split(' ')
-        .collect();
+    let data: Vec<&str> = buf.trim().split(' ').collect();
 
     let cmd_name = data.get(0).copied().unwrap_or("");
 

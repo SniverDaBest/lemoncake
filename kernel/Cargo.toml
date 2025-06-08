@@ -1,16 +1,15 @@
 [package]
 name = "kernel"
-version = "25.5.0"
+version = "25.6.0"
 edition = "2024"
 
 [dependencies]
 acpi = "5.2.0"
-ansi_rgb = "0.2.0"
+bitfield = "0.19.1"
 bootloader_api = "0.11.10"
 linked_list_allocator = "0.10.5"
 pc-keyboard = "0.8.0"
 pic8259 = "0.11.0"
-rgb = "0.8.50"
 spin = "0.10.0"
 spinning_top = "0.3.0"
 uart_16550 = "0.3.2"
@@ -39,3 +38,7 @@ features = ["alloc"]
 [dependencies.conquer-once]
 version = "0.4.0"
 default-features = false
+
+[features]
+default = ["serial-faces"]
+serial-faces = []

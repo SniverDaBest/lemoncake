@@ -80,11 +80,11 @@ impl<'a> FAT<'a> {
     pub fn validate(&mut self) -> Result<(), FSError> {
         let mut buf = [0u8; 512];
         if self.device.read_sector(0, 0, &mut buf) == false {
-            error!("Unable to read sector 0!");
+            error!("(FAT32) Unable to read sector 0!");
             return Err(FSError::ReadError);
         };
         if &buf[0x36..0x3E] != b"FAT32   " {
-            error!("Not a FAT32 filesystem!");
+            error!("(FAT32) Not a FAT32 filesystem!");
             return Err(FSError::BadFS);
         }
 
@@ -502,19 +502,19 @@ impl<'a> FAT<'a> {
 
 impl<'a> Filesystem for FAT<'a> {
     fn mount(&mut self) -> Result<(), FSError> {
-        info!("Mounting FAT device...");
+        info!("(FAT32) Mounting FAT device...");
         if self.mounted {
-            error!("Device already mounted!");
+            error!("(FAT32) Device already mounted!");
             return Err(FSError::AlreadyMounted);
         }
 
         let mut buf = [0u8; 512];
         if self.device.read_sector(0, 0, &mut buf) == false {
-            error!("Unable to read sector 0!");
+            error!("(FAT32) Unable to read sector 0!");
             return Err(FSError::ReadError);
         };
         if &buf[0x36..0x3E] != b"FAT32   " {
-            error!("Not a FAT32 filesystem!");
+            error!("(FAT32) Not a FAT32 filesystem!");
             return Err(FSError::BadFS);
         }
 
@@ -531,9 +531,9 @@ impl<'a> Filesystem for FAT<'a> {
     }
 
     fn unmount(&mut self) -> Result<(), FSError> {
-        info!("Unmounting FAT AHCI device...");
+        info!("(FAT32) Unmounting FAT AHCI device...");
         if !self.mounted {
-            error!("Can't unmount device that is not mounted!");
+            error!("(FAT32) Can't unmount device that is not mounted!");
             return Err(FSError::NotMounted);
         }
         self.mounted = false;

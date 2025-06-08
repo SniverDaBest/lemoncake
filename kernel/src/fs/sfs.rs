@@ -1,6 +1,6 @@
 //! SFS - Simple Filesystem (created by Brendan Trotter)
 use super::{FSError, FSResult, Filesystem};
-use crate::{ahci::AhciDevice, error, success, warning};
+use crate::{ahci::AhciDevice, error, nftodo, success, warning};
 use alloc::{format, string::*, vec, vec::*};
 
 #[derive(Debug)]
@@ -61,7 +61,7 @@ impl SuperBlock {
             return false;
         }
 
-        // TODO: Double check the checksum
+        nftodo!("(SFS) Double check the checksum");
 
         return true;
     }

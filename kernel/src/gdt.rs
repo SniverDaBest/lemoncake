@@ -5,6 +5,8 @@ use x86_64::VirtAddr;
 use x86_64::structures::gdt::{Descriptor, GlobalDescriptorTable, SegmentSelector};
 use x86_64::structures::tss::TaskStateSegment;
 
+use crate::info;
+
 pub const DOUBLE_FAULT_IST_INDEX: u16 = 0;
 pub const TIMER_IST_INDEX: u16 = 1;
 
@@ -58,6 +60,13 @@ lazy_static! {
         let mut gdt = GlobalDescriptorTable::new();
         let code_selector = gdt.append(Descriptor::kernel_code_segment());
         let tss_selector = gdt.append(Descriptor::tss_segment(&TSS));
+
+        let (start, end) = tss_stack_bounds();
+        info!(
+            "(GDT) Timer IST Stack Range: {:#x} - {:#x}",
+            start.as_u64(),
+            end.as_u64()
+        );
         (
             gdt,
             Selectors {

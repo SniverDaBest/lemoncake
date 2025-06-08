@@ -311,7 +311,7 @@ pub fn probe_port(abar: &mut HbaMem) {
                 AHCI_DEV_PM => "PM drive found at port ",
                 _ => "No drive found at port ",
             };
-            serial_println!("{}{}", port_msg, i);
+            serial_println!("(AHCI) {}{}", port_msg, i);
         }
         pi >>= 1;
         i += 1;
@@ -403,7 +403,7 @@ fn init_port_with_timeout(port: &mut AhciPort) -> bool {
         while timeout > 0 && ((*port.hba_port).cmd & HBA_PXCMD_CR) != 0 {
             timeout -= 1;
             if timeout == 0 {
-                info!("Port stop command timed out");
+                info!("(AHCI) Port stop command timed out");
                 return false;
             }
         }
@@ -416,7 +416,7 @@ fn init_port_with_timeout(port: &mut AhciPort) -> bool {
         while timeout > 0 && ((*port.hba_port).cmd & HBA_PXCMD_CR) == 0 {
             timeout -= 1;
             if timeout == 0 {
-                info!("Port start command timed out");
+                info!("(AHCI) Port start command timed out");
                 return false;
             }
         }
@@ -448,7 +448,7 @@ impl AhciDevice {
             unsafe {
                 mapper
                     .map_to(page, frame, flags, frame_allocator)
-                    .expect("Failed to map AHCI ABAR")
+                    .expect("(AHCI) Failed to map AHCI ABAR")
                     .flush();
             }
         }
@@ -492,55 +492,55 @@ impl AhciDevice {
         mapper: &mut impl Mapper<Size4KiB>,
         frame_allocator: &mut impl FrameAllocator<Size4KiB>,
     ) -> Result<(), MapToError<Size4KiB>> {
-        info!("Starting AHCI device initialization...");
+        info!("(AHCI) Starting AHCI device initialization...");
 
         map_ahci_memory(mapper, frame_allocator)?;
-        info!("AHCI memory mapping completed");
+        info!("(AHCI) AHCI memory mapping completed");
 
         let command = read_pci(0x04, &self.pci_device);
-        info!("Current PCI command: 0x{:x}", command);
+        info!("(AHCI) Current PCI command: 0x{:x}", command);
         write_pci(0x04, &self.pci_device, command | 0x6);
-        info!("PCI bus mastering enabled");
+        info!("(AHCI) PCI bus mastering enabled");
 
         let ghc = unsafe { (*self.abar).ghc };
-        info!("Current GHC: 0x{:x}", ghc);
+        info!("(AHCI) Current GHC: 0x{:x}", ghc);
         unsafe {
             (*self.abar).ghc = ghc | (1 << 31);
-            info!("AHCI enabled in GHC: 0x{:x}", (*self.abar).ghc);
+            info!("(AHCI) AHCI enabled in GHC: 0x{:x}", (*self.abar).ghc);
         }
 
         for port in &mut self.ports {
             if port.is_implemented && port.port_type == AHCI_DEV_SATA {
-                info!("Initializing port {}", port.port_number);
+                info!("(AHCI) Initializing port {}", port.port_number);
                 let result = init_port_with_timeout(port);
                 if !result {
-                    info!("Port {} initialization timed out", port.port_number);
+                    info!("(AHCI) Port {} initialization timed out", port.port_number);
                     continue;
                 }
             }
         }
 
-        info!("AHCI device initialization completed");
+        info!("(AHCI) AHCI device initialization completed");
         Ok(())
     }
 
     /// False if bad, true if good
     pub fn read_sector(&mut self, port_number: usize, lba: u64, buffer: &mut [u8]) -> bool {
         if buffer.len() < SECTOR_SIZE {
-            error!("Buffer too small for sector read");
+            error!("(AHCI) Buffer too small for sector read");
             return false;
         }
 
         let port = match self.ports.iter_mut().find(|p| p.port_number == port_number) {
             Some(p) if p.port_type == AHCI_DEV_SATA => unsafe { &mut *p.hba_port },
             _ => {
-                error!("Invalid port number or port is not SATA");
+                error!("(AHCI) Invalid port number or port is not SATA");
                 return false;
             }
         };
 
         if !port.read(lba, 1, &mut buffer[..SECTOR_SIZE]) {
-            error!("Failed to read sector at LBA {}", lba);
+            error!("(AHCI) Failed to read sector at LBA {}", lba);
             return false;
         }
 
@@ -550,20 +550,20 @@ impl AhciDevice {
     /// False if bad, true if good
     pub fn write_sector(&mut self, port_number: usize, lba: u64, buffer: &[u8]) -> bool {
         if buffer.len() != SECTOR_SIZE {
-            error!("Buffer not the correct size for sector write");
+            error!("(AHCI) Buffer not the correct size for sector write");
             return false;
         }
 
         let port = match self.ports.iter_mut().find(|p| p.port_number == port_number) {
             Some(p) if p.port_type == AHCI_DEV_SATA => unsafe { &mut *p.hba_port },
             _ => {
-                error!("Invalid port number or port is not SATA");
+                error!("(AHCI) Invalid port number or port is not SATA");
                 return false;
             }
         };
 
         if !port.write(lba, 1, &buffer[..SECTOR_SIZE]) {
-            error!("Failed to write sector at LBA {}", lba);
+            error!("(AHCI) Failed to write sector at LBA {}", lba);
             return false;
         }
 
@@ -590,14 +590,14 @@ pub unsafe fn find_ahci_devices(
 
 fn port_rebase(port: *mut HbaPort, portno: usize) {
     unsafe {
-        info!("Rebasing port {} at address {:p}", portno, port);
+        info!("(AHCI) Rebasing port {} at address {:p}", portno, port);
 
         let cmd_list_base = AHCI_BASE + (portno as u32 * AHCI_CMD_LIST_SIZE as u32);
         let fis_base =
             AHCI_BASE + (32 * AHCI_CMD_LIST_SIZE) as u32 + (portno as u32 * AHCI_FIS_SIZE as u32);
 
-        info!("Command list base: 0x{:x}", cmd_list_base);
-        info!("FIS base: 0x{:x}", fis_base);
+        info!("(AHCI) Command list base: 0x{:x}", cmd_list_base);
+        info!("(AHCI) FIS base: 0x{:x}", fis_base);
 
         (*port).clb = cmd_list_base;
         (*port).clbu = 0;
@@ -627,25 +627,25 @@ pub fn test_ahci_read_write(device: &mut AhciDevice) {
 
     for port in &mut device.ports {
         if port.port_type == AHCI_DEV_SATA {
-            info!("Testing SATA port {}", port.port_number);
+            info!("(AHCI) Testing SATA port {}", port.port_number);
 
             let port = unsafe { &mut *port.hba_port };
             if port.read(0, 1, &mut read_buffer) {
-                info!("Successfully read first sector");
+                info!("(AHCI) Successfully read first sector");
 
                 if port.write(1, 1, &write_buffer) {
-                    info!("Successfully wrote test pattern");
+                    info!("(AHCI) Successfully wrote test pattern");
 
                     if port.read(1, 1, &mut read_buffer) && read_buffer == write_buffer {
-                        info!("Successfully verified written data");
+                        info!("(AHCI) Successfully verified written data");
                     } else {
-                        error!("Data verification failed.");
+                        error!("(AHCI) Data verification failed.");
                     }
                 } else {
-                    error!("Failed to write test pattern to second sector.");
+                    error!("(AHCI) Failed to write test pattern to second sector.");
                 }
             } else {
-                error!("Unable to read first sector.");
+                error!("(AHCI) Unable to read first sector.");
             }
             break;
         }

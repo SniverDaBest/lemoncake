@@ -1,6 +1,7 @@
 use core::arch::asm;
+use core::ptr::{read_volatile, write_volatile};
 
-use crate::{error, gdt, hlt_loop, info, serial_print};
+use crate::{error, gdt, hlt_loop, info, print, serial_print, serial_println};
 use lazy_static::lazy_static;
 use pic8259::ChainedPics;
 use x86_64::PhysAddr;
@@ -14,13 +15,12 @@ pub const PIC_1_OFFSET: u8 = 32;
 pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
 const IA32_APIC_BASE_MSR: u32 = 0x1B;
 const IA32_APIC_BASE_MSR_ENABLE: u32 = 0x800;
-const APIC_EOI_OFFSET: usize = 0xB0;
+const APIC_VIRT_BASE: u64 = 0xFFFF_FF00_0000_0000;
 const APIC_SVR_OFFSET: usize = 0xF0;
 const APIC_LVT_TIMER_OFFSET: usize = 0x320;
 const APIC_TIMER_INITCNT_OFFSET: usize = 0x380;
 const APIC_TIMER_DIV_OFFSET: usize = 0x3E0;
 const APIC_TIMER_PERIODIC: u32 = 0x20000;
-const APIC_VIRT_BASE: u64 = 0xFFFF_FF00_0000_0000; // Chosen virtual address for APIC
 
 #[derive(Debug, Clone, Copy)]
 #[repr(u8)]
@@ -48,8 +48,8 @@ lazy_static! {
                 .set_handler_fn(double_fault_handler)
                 .set_stack_index(gdt::DOUBLE_FAULT_IST_INDEX);
             idt[InterruptIndex::Timer.as_u8()].set_handler_fn(timer_interrupt_handler).set_stack_index(gdt::TIMER_IST_INDEX);
+            //idt[InterruptIndex::Keyboard.as_u8()].set_handler_fn(keyboard_interrupt_handler);
         }
-        //idt[InterruptIndex::Keyboard.as_u8()].set_handler_fn(keyboard_interrupt_handler);
         idt
     };
 }
@@ -81,7 +81,7 @@ unsafe fn set_apic_base(apic: usize) {
 }
 
 unsafe fn get_apic_base() -> usize {
-    APIC_VIRT_BASE as usize
+    return APIC_VIRT_BASE as usize;
 }
 
 unsafe fn get_apic_phys_base() -> usize {
@@ -96,13 +96,13 @@ unsafe fn get_apic_phys_base() -> usize {
 unsafe fn read_reg(offset: usize) -> u32 {
     let apic_base = get_apic_base();
     let reg_ptr = (apic_base + offset) as *const u32;
-    core::ptr::read_volatile(reg_ptr)
+    return read_volatile(reg_ptr);
 }
 
 unsafe fn write_reg(offset: usize, value: u32) {
     let apic_base = get_apic_base();
     let reg_ptr = (apic_base + offset) as *mut u32;
-    core::ptr::write_volatile(reg_ptr, value);
+    write_volatile(reg_ptr, value);
 }
 
 unsafe fn apic_eoi() {
@@ -116,7 +116,7 @@ pub unsafe fn setup_pics(
     PICS.lock().initialize();
 
     if check_apic() {
-        info!("Using the APIC!");
+        info!("(APIC) Using the APIC!");
         disable_pics();
 
         let apic_phys_base = get_apic_phys_base();
@@ -125,24 +125,23 @@ pub unsafe fn setup_pics(
             PhysFrame::containing_address(PhysAddr::new((apic_phys_base + 0xFFF) as u64));
         let apic_start_page = Page::containing_address(VirtAddr::new(APIC_VIRT_BASE));
         let apic_end_page = Page::containing_address(VirtAddr::new(APIC_VIRT_BASE + 0xFFF));
-        let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
+        let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::NO_CACHE;
 
         for (page, frame) in Page::range_inclusive(apic_start_page, apic_end_page)
             .zip(PhysFrame::range_inclusive(apic_start_frame, apic_end_frame))
         {
             info!(
-                "Mapping page: {:?} with flags {:?} on frame {:?}",
+                "(APIC) Mapping page: {:?} with flags {:?} on frame {:?}",
                 page, flags, frame
             );
             mapper
                 .map_to(page, frame, flags, frame_allocator)
-                .expect("Unable to map the APIC memory region!")
+                .expect("(APIC) Unable to map the APIC memory region!")
                 .flush();
         }
 
-        set_apic_base(apic_phys_base); // Still use the physical address for MSR
+        set_apic_base(apic_phys_base);
 
-        // Now all APIC register accesses use APIC_VIRT_BASE
         write_reg(0xF0, read_reg(0xF0) | 0x100);
 
         let svr = read_reg(APIC_SVR_OFFSET);
@@ -153,11 +152,9 @@ pub unsafe fn setup_pics(
             APIC_LVT_TIMER_OFFSET,
             APIC_TIMER_PERIODIC | (PIC_1_OFFSET as u32),
         );
-        write_reg(APIC_TIMER_INITCNT_OFFSET, 10_000_000);
-
-        info!("APIC enabled and timer configured (uncalibrated)");
+        write_reg(APIC_TIMER_INITCNT_OFFSET, 100_000_000);
     } else {
-        panic!("Please upgrade to a VM/Computer with APIC support!");
+        panic!("(APIC) Please upgrade to a VM/Computer with APIC support!");
     }
 }
 
@@ -187,16 +184,17 @@ extern "x86-interrupt" fn page_fault_handler(
 
 extern "x86-interrupt" fn double_fault_handler(
     stack_frame: InterruptStackFrame,
-    _error_code: u64,
+    error_code: u64,
 ) -> ! {
     error!(
-        "\nUh-oh! The Lemoncake kernel double-faulted.\nHere's the stack frame:\n{:#?}",
-        stack_frame
+        "\nUh-oh! The Lemoncake kernel double-faulted.\nHere's the stack frame:\n{:#?}\nError Code: {}",
+        stack_frame, error_code
     );
 
     loop {}
 }
 
+#[allow(unused)]
 extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
     serial_print!(".");
     unsafe {
@@ -204,6 +202,7 @@ extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFr
     }
 }
 
+#[allow(unused)]
 extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStackFrame) {
     use x86_64::instructions::port::Port;
 
@@ -212,7 +211,6 @@ extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStac
     crate::keyboard::add_scancode(scancode);
 
     unsafe {
-        PICS.lock()
-            .notify_end_of_interrupt(InterruptIndex::Keyboard.as_u8());
+        apic_eoi();
     }
 }
