@@ -31,9 +31,8 @@ lazy_static! {
 
             pub static mut STACK: Stack = Stack([0; STACK_SIZE]);
 
-            let x = unsafe { STACK.0 };
-
-            let stack_start = VirtAddr::from_ptr(addr_of!(x));
+            #[allow(static_mut_refs)]
+            let stack_start = VirtAddr::from_ptr(unsafe { &STACK.0 as *const _ });
             let stack_end = stack_start + STACK_SIZE as u64;
 
             STACK_START.store(stack_start.as_u64(), Ordering::Relaxed);
@@ -46,8 +45,8 @@ lazy_static! {
             #[repr(align(16))]
             pub struct Stack([u8; STACK_SIZE]);
             pub static mut STACK: Stack = Stack([0; STACK_SIZE]);
-            let x = unsafe { STACK.0 };
-            let stack_start = VirtAddr::from_ptr(addr_of!(x));
+            #[allow(static_mut_refs)]
+            let stack_start = VirtAddr::from_ptr(unsafe { &STACK.0 as *const _ });
             let stack_end = stack_start + STACK_SIZE as u64;
             stack_end
         };

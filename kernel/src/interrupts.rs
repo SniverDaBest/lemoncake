@@ -48,7 +48,6 @@ lazy_static! {
                 .set_handler_fn(double_fault_handler)
                 .set_stack_index(gdt::DOUBLE_FAULT_IST_INDEX);
             idt[InterruptIndex::Timer.as_u8()].set_handler_fn(timer_interrupt_handler).set_stack_index(gdt::TIMER_IST_INDEX);
-            //idt[InterruptIndex::Keyboard.as_u8()].set_handler_fn(keyboard_interrupt_handler);
         }
         idt
     };
@@ -152,7 +151,7 @@ pub unsafe fn setup_pics(
             APIC_LVT_TIMER_OFFSET,
             APIC_TIMER_PERIODIC | (PIC_1_OFFSET as u32),
         );
-        write_reg(APIC_TIMER_INITCNT_OFFSET, 100_000_000);
+        write_reg(APIC_TIMER_INITCNT_OFFSET, 1_000_000_000);
     } else {
         panic!("(APIC) Please upgrade to a VM/Computer with APIC support!");
     }

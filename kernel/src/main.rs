@@ -5,12 +5,11 @@
 
 /* TODO:
  * Fix APIC/PICS
- * Commandline with feature-set similar (or equal) to the old Lemoncake version (see the main branch)
+ * Shutting down the system (w/o force closing Qemu, VBox, etc.)
  * Usermode
  * Support running apps (in usermode)
- * Support external drivers
  * A C/C++ library (like glibc or musl)
- * Shutting down the system (w/o force closing Qemu, VBox, etc.)
+ * Support external drivers
  */
 
 extern crate alloc;
