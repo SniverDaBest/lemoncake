@@ -37,5 +37,6 @@ version = "0.4.0"
 default-features = false
 
 [features]
-default = ["serial-faces"]
+default = ["serial-faces", "status-faces"]
 serial-faces = []
+status-faces = []

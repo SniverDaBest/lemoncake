@@ -93,7 +93,7 @@ struct Selectors {
 }
 
 pub fn init() {
-    use x86_64::instructions::segmentation::{SS, CS, Segment};
+    use x86_64::instructions::segmentation::{CS, SS, Segment};
     use x86_64::instructions::tables::load_tss;
 
     GDT.0.load();

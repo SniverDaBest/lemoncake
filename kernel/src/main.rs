@@ -67,7 +67,11 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     }
 
     let pkg_ver = env!("CARGO_PKG_VERSION");
-    info!("Running Lemoncake version {}m{}", pkg_ver.split(".").nth(0).unwrap_or("?"), pkg_ver.split(".").nth(1).unwrap_or("?"));
+    info!(
+        "Running Lemoncake version {}m{}",
+        pkg_ver.split(".").nth(0).unwrap_or("?"),
+        pkg_ver.split(".").nth(1).unwrap_or("?")
+    );
 
     warning!("This is a hobby project. Don't expect it to be stable, secure, or even work.");
 
@@ -190,18 +194,22 @@ macro_rules! println {
 #[macro_export]
 macro_rules! info {
     ($($arg:tt)*) => {
+        #[cfg(feature = "status-faces")]
+        $crate::print!("\x1b[34m(o_o) ");
         $crate::println!(
-            "\x1b[34m(o_o) [INFO]:\x1b[0m {}",
+            "\x1b[34m[INFO]:\x1b[0m {}",
             format_args!($($arg)*)
-        )
+        );
     };
 }
 
 #[macro_export]
 macro_rules! warning {
     ($($arg:tt)*) => {
+        #[cfg(feature = "status-faces")]
+        $crate::print!("\x1b[33m(0_0) ");
         $crate::println!(
-            "\x1b[33m(0_0) [WARNING]:\x1b[0m {}",
+            "\x1b[33m[WARNING]:\x1b[0m {}",
             format_args!($($arg)*)
         )
     };
@@ -210,8 +218,10 @@ macro_rules! warning {
 #[macro_export]
 macro_rules! error {
     ($($arg:tt)*) => {
+        #[cfg(feature = "status-faces")]
+        $crate::print!("\x1b[31m(X_X) ");
         $crate::println!(
-            "\x1b[31m(X_X) [ERROR]:\x1b[0m {}",
+            "\x1b[31m[ERROR]:\x1b[0m {}",
             format_args!($($arg)*)
         )
     };
@@ -220,8 +230,10 @@ macro_rules! error {
 #[macro_export]
 macro_rules! success {
     ($($arg:tt)*) => {
+        #[cfg(feature = "status-faces")]
+        $crate::print!("\x1b[32m(^_^) ");
         $crate::println!(
-            "\x1b[32m(^_^) [SUCCESS]:\x1b[0m {}",
+            "\x1b[32m[SUCCESS]:\x1b[0m {}",
             format_args!($($arg)*)
         )
     };
@@ -230,8 +242,10 @@ macro_rules! success {
 #[macro_export]
 macro_rules! nftodo {
     ($($arg:tt)*) => {
+        #[cfg(feature = "status-faces")]
+        $crate::print!("\x1b[35m(-_-) ");
         $crate::println!(
-            "\x1b[35m(-_-) [TODO]:\x1b[0m {}",
+            "\x1b[35m[TODO]:\x1b[0m {}",
             format_args!($($arg)*)
         )
     };
