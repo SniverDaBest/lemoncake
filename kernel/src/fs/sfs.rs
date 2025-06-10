@@ -4,6 +4,7 @@ use crate::{ahci::AhciDevice, error, nftodo, success, warning};
 use alloc::{format, string::*, vec, vec::*};
 
 #[derive(Debug)]
+#[allow(dead_code)]
 pub struct SuperBlock {
     last_alt_time: u64,
     /// Size is in *blocks*, not bytes.

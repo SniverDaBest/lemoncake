@@ -67,7 +67,7 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     }
 
     let pkg_ver = env!("CARGO_PKG_VERSION");
-    info!("Running Lemoncake version {}", pkg_ver);
+    info!("Running Lemoncake version {}m{}", pkg_ver.split(".").nth(0).unwrap_or("?"), pkg_ver.split(".").nth(1).unwrap_or("?"));
 
     warning!("This is a hobby project. Don't expect it to be stable, secure, or even work.");
 
@@ -83,7 +83,7 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     gdt::init();
 
     info!("Verifying TSS stack mapping...");
-    let (stack_start, stack_end) = gdt::tss_stack_bounds();
+    let (stack_start, stack_end) = gdt::timer_stack_bounds();
     for addr in (stack_start.as_u64()..stack_end.as_u64()).step_by(0x1000) {
         let page: Page = Page::containing_address(VirtAddr::new(addr));
         if mapper.translate_page(page).is_err() {
@@ -130,8 +130,6 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     let mut e = Executor::new();
     e.spawn(Task::new(run_command_line()));
     e.run();
-
-    loop {}
 }
 
 pub fn hlt_loop() -> ! {

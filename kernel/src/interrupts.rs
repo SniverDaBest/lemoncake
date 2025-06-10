@@ -1,9 +1,10 @@
 use core::arch::asm;
 use core::ptr::{read_volatile, write_volatile};
 
-use crate::{error, gdt, hlt_loop, info, print, serial_print, serial_println};
+use crate::{error, gdt, hlt_loop, info, sad, serial_print};
 use lazy_static::lazy_static;
 use pic8259::ChainedPics;
+use spinning_top::Spinlock;
 use x86_64::PhysAddr;
 use x86_64::VirtAddr;
 use x86_64::registers::model_specific::Msr;
@@ -13,6 +14,7 @@ use x86_64::structures::paging::{FrameAllocator, Mapper, Page, PhysFrame, Size4K
 
 pub const PIC_1_OFFSET: u8 = 32;
 pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
+pub const USING_APIC: Spinlock<bool> = Spinlock::new(true);
 const IA32_APIC_BASE_MSR: u32 = 0x1B;
 const IA32_APIC_BASE_MSR_ENABLE: u32 = 0x800;
 const APIC_VIRT_BASE: u64 = 0xFFFF_FF00_0000_0000;
@@ -41,14 +43,20 @@ pub static PICS: spin::Mutex<ChainedPics> =
 lazy_static! {
     static ref IDT: InterruptDescriptorTable = {
         let mut idt = InterruptDescriptorTable::new();
+
         idt.breakpoint.set_handler_fn(breakpoint_handler);
         idt.page_fault.set_handler_fn(page_fault_handler);
+
         unsafe {
             idt.double_fault
                 .set_handler_fn(double_fault_handler)
                 .set_stack_index(gdt::DOUBLE_FAULT_IST_INDEX);
-            idt[InterruptIndex::Timer.as_u8()].set_handler_fn(timer_interrupt_handler).set_stack_index(gdt::TIMER_IST_INDEX);
+
+            idt[InterruptIndex::Timer.as_u8()]
+                .set_handler_fn(timer_interrupt_handler)
+                .set_stack_index(1);
         }
+
         idt
     };
 }
@@ -117,6 +125,7 @@ pub unsafe fn setup_pics(
     if check_apic() {
         info!("(APIC) Using the APIC!");
         disable_pics();
+        init_pit(100);
 
         let apic_phys_base = get_apic_phys_base();
         let apic_start_frame = PhysFrame::containing_address(PhysAddr::new(apic_phys_base as u64));
@@ -146,15 +155,30 @@ pub unsafe fn setup_pics(
         let svr = read_reg(APIC_SVR_OFFSET);
         write_reg(APIC_SVR_OFFSET, svr | 0x100 | (PIC_1_OFFSET as u32));
 
-        write_reg(APIC_TIMER_DIV_OFFSET, 0b0011);
+        write_reg(APIC_TIMER_DIV_OFFSET, 0x0011);
         write_reg(
             APIC_LVT_TIMER_OFFSET,
             APIC_TIMER_PERIODIC | (PIC_1_OFFSET as u32),
         );
         write_reg(APIC_TIMER_INITCNT_OFFSET, 1_000_000_000);
     } else {
-        panic!("(APIC) Please upgrade to a VM/Computer with APIC support!");
+        *USING_APIC.lock() = false;
+        info!("(PICS) Using PICS!");
     }
+}
+
+unsafe fn init_pit(frequency_hz: u32) {
+    info!("(PIT) Initializing PIT with frequency: {} Hz", frequency_hz);
+    let divisor = (1193182 / frequency_hz) as u16;
+    use x86_64::instructions::port::Port;
+
+    let mut command = Port::new(0x43);
+    let mut channel0 = Port::new(0x40);
+
+    command.write(0x36u8);
+
+    channel0.write((divisor & 0xFF) as u8);
+    channel0.write((divisor >> 8) as u8);
 }
 
 pub fn init_idt() {
@@ -177,6 +201,8 @@ extern "x86-interrupt" fn page_fault_handler(
         error_code,
         stack_frame
     );
+    
+    sad!();
 
     hlt_loop();
 }
@@ -190,6 +216,8 @@ extern "x86-interrupt" fn double_fault_handler(
         stack_frame, error_code
     );
 
+    sad!();
+
     loop {}
 }
 
@@ -197,7 +225,8 @@ extern "x86-interrupt" fn double_fault_handler(
 extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
     serial_print!(".");
     unsafe {
-        apic_eoi();
+        if *USING_APIC.lock() { apic_eoi(); }
+        else { PICS.lock().notify_end_of_interrupt(InterruptIndex::Timer.as_u8()); }
     }
 }
 

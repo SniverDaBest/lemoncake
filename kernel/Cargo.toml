@@ -3,6 +3,9 @@ name = "kernel"
 version = "25.6.0"
 edition = "2024"
 
+[build-dependencies]
+cc = "1.2.26"
+
 [dependencies]
 bitfield = "0.19.1"
 bootloader_api = "0.11.10"
