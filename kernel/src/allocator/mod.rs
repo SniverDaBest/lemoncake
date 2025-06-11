@@ -69,6 +69,7 @@ impl<A> Locked<A> {
         }
     }
 
+    #[allow(mismatched_lifetime_syntaxes)]
     pub fn lock(&self) -> spin::MutexGuard<A> {
         self.inner.lock()
     }

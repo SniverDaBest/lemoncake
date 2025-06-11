@@ -420,7 +420,7 @@ impl<'a> Filesystem for SFS<'a> {
         return Ok(());
     }
 
-    fn remove_file(&mut self, path: &str) -> FSResult<()> {
+    fn remove_file(&mut self, _path: &str) -> FSResult<()> {
         error!("(SFS) Removing files is not implemented yet!");
         return Err(FSError::WriteError);
     }
@@ -455,7 +455,7 @@ impl<'a> Filesystem for SFS<'a> {
         return Ok(());
     }
 
-    fn remove_dir(&mut self, path: &str) -> FSResult<()> {
+    fn remove_dir(&mut self, _path: &str) -> FSResult<()> {
         error!("(SFS) Removing directories is not implemented yet!");
         return Err(FSError::WriteError);
     }
