@@ -19,9 +19,9 @@ fn main() {
     let mut copy = std::process::Command::new("copy");
     #[cfg(target_os = "windows")]
     if uefi {
-        copy.arg(up).arg("./target/uefi.img");
+        copy.arg(up).arg(".\\target\\uefi.img");
     } else {
-        copy.arg(bp).arg("./target/bios.img");
+        copy.arg(bp).arg(".\\target\\bios.img");
     }
 
     let mut cpchild = copy.spawn().unwrap();
@@ -36,8 +36,10 @@ fn main() {
         cmd.arg("-drive").arg(format!("format=raw,file={}", bp));
     }
 
-    cmd.arg("-m").arg("1G");
+    #[cfg(target_os = "linux")]
     cmd.arg("-enable-kvm");
+
+    cmd.arg("-m").arg("1G");
     cmd.arg("-serial").arg("stdio");
     cmd.arg("-drive")
         .arg("id=disk,file=hd.img,if=none,format=raw");
