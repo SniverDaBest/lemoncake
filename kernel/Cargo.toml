@@ -7,11 +7,13 @@ edition = "2024"
 cc = "1.2.26"
 
 [dependencies]
+acpi = "5.2.0"
 bitfield = "0.19.1"
 bootloader_api = "0.11.10"
 linked_list_allocator = "0.10.5"
 pc-keyboard = "0.8.0"
 pic8259 = "0.11.0"
+raw-cpuid = "10.2.0"
 spin = "0.10.0"
 spinning_top = "0.3.0"
 uart_16550 = "0.3.2"

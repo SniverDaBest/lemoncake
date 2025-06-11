@@ -72,7 +72,9 @@ impl Framebuffer {
 
     pub fn draw_smiley(&mut self, x: usize, y: usize, color: (u8, u8, u8, u8)) {
         let (r, g, b, a) = color;
-        if a == 0 { return; }
+        if a == 0 {
+            return;
+        }
         // left eye
         self.put_pixel(x + 1, y, (r, g, b));
         self.put_pixel(x + 1, y + 1, (r, g, b));
@@ -91,7 +93,9 @@ impl Framebuffer {
 
     pub fn draw_sad_face(&mut self, x: usize, y: usize, color: (u8, u8, u8, u8)) {
         let (r, g, b, a) = color;
-        if a == 0 { return; }
+        if a == 0 {
+            return;
+        }
         // left eye
         self.put_pixel(x + 1, y, (r, g, b));
         self.put_pixel(x + 1, y + 1, (r, g, b));
@@ -113,7 +117,7 @@ impl Framebuffer {
     }
 }
 
-static mut TTY_BUFFER: [char; 80 * 25] = [' '; 80 * 25];
+static mut TTY_BUFFER: [char; 80 * 25] = ['\x00'; 80 * 25];
 
 pub struct TTY {
     width: usize,
@@ -152,10 +156,19 @@ impl TTY {
         crate::font::draw_char(x * 8, y * 8, c, color);
     }
 
-    pub fn fill_tty(&mut self, c: char) {
-        for i in 0..self.text_buf.len() {
-            self.text_buf[i] = c;
+    pub fn get_char(&self, x: usize, y: usize) -> Option<char> {
+        if x >= self.width || y >= self.height {
+            return None;
         }
+        return Some(self.text_buf[y * self.width + x]);
+    }
+
+    pub fn clear_tty(&mut self) {
+        if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
+            fb.clear_screen((30,30,46));
+        }
+        self.cursor_x = 0;
+        self.cursor_y = 0;
     }
 
     pub fn write_str(&mut self, s: &str) {

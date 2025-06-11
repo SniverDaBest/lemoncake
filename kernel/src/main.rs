@@ -14,8 +14,10 @@
 
 extern crate alloc;
 
+pub mod acpi;
 pub mod ahci;
 pub mod allocator;
+pub mod apic;
 pub mod commandline;
 pub mod display;
 pub mod executor;
@@ -29,7 +31,7 @@ pub mod pci;
 pub mod png;
 pub mod serial;
 
-use crate::memory::BootInfoFrameAllocator;
+use alloc::vec::Vec;
 use bootloader_api::config::{BootloaderConfig, Mapping};
 use bootloader_api::{BootInfo, entry_point};
 use commandline::run_command_line;
@@ -37,12 +39,9 @@ use core::error;
 use core::fmt::{Arguments, Write};
 use display::{Framebuffer, TTY};
 use executor::{Executor, Task};
-use interrupts::setup_pics;
+use memory::BootInfoFrameAllocator;
 use spinning_top::Spinlock;
-use x86_64::{
-    VirtAddr,
-    structures::paging::{Mapper, Page},
-};
+use x86_64::{PhysAddr, VirtAddr};
 
 pub static BOOTLOADER_CONFIG: BootloaderConfig = {
     let mut config = BootloaderConfig::new_default();
@@ -51,6 +50,7 @@ pub static BOOTLOADER_CONFIG: BootloaderConfig = {
 };
 
 pub static mut PMO: u64 = 0;
+pub const HANDLER: acpi::Handler = acpi::Handler;
 
 entry_point!(kernel_main, config = &BOOTLOADER_CONFIG);
 
@@ -82,7 +82,9 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
         .physical_memory_offset
         .into_option()
         .expect("No physical memory offset found!");
-    unsafe { PMO = pmo; }
+    unsafe {
+        PMO = pmo;
+    }
 
     info!("Physical memory offset: {:#X}", pmo);
 
@@ -92,33 +94,70 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
 
     info!("Initializing heap...");
     allocator::init_heap(&mut mapper, &mut frame_allocator).expect("Unable to initialize heap!");
-    
+
     info!("Displaying logo...");
     png::draw_png(include_bytes!("../../assets/logo.png"), 1206, 0);
 
-    info!("Initializing GDT...");
+    info!("Getting ACPI information...");
+    let tables = unsafe {
+        ::acpi::AcpiTables::from_rsdp(
+            HANDLER,
+            info.rsdp_addr
+                .into_option()
+                .expect("Unable to get the RSDP address!") as usize,
+        )
+        .expect("Unable to get ACPI tables from the RSDP!")
+    };
+    info!("ACPI revision: {}", tables.revision());
+
+    info!("Initializing IDT & GDT...");
+    interrupts::init_idt();
     gdt::init();
 
-    info!("Verifying TSS stack mapping...");
-    let (stack_start, stack_end) = gdt::timer_stack_bounds();
-    for addr in (stack_start.as_u64()..stack_end.as_u64()).step_by(0x1000) {
-        let page: Page = Page::containing_address(VirtAddr::new(addr));
-        if mapper.translate_page(page).is_err() {
-            panic!("TSS stack page at {:#X} is not mapped!", addr);
-        }
-    }
+    let pi = tables
+        .platform_info()
+        .expect("Unable to get platform info!");
 
-    info!("Initializing IDT and setting up PICS/APIC...");
-    interrupts::init_idt();
-    unsafe {
-        setup_pics(&mut mapper, &mut frame_allocator);
+    info!("Setting up PICS/APIC");
+    if let ::acpi::InterruptModel::Apic(apic) = pi.interrupt_model {
+        info!("Using APIC!");
+        let lapic = unsafe { apic::LocalApic::init(PhysAddr::new(apic.local_apic_address)) };
+        let mut freq = 1000_000_000;
+        if let Some(cpuid) = apic::cpuid() {
+            if let Some(tsc) = cpuid.get_tsc_info() {
+                freq = tsc.nominal_frequency();
+            }
+        }
+        unsafe {
+            lapic.set_div_conf(0b1011);
+            lapic.set_lvt_timer((1 << 17) + 48);
+            lapic.set_init_count(freq / 1000);
+        }
+
+        for ioapic in apic.io_apics.iter() {
+            info!("Found IOAPIC at 0x{:x}", ioapic.address);
+            let ioa = apic::IoApic::init(ioapic);
+            let ver = ioa.read(apic::IOAPICVER);
+            let id = ioa.read(apic::IOAPICVER);
+            info!("  IOAPIC version: {}", ver);
+            info!("  IOAPIC id: {}", id);
+            for i in 0..24 {
+                let n = ioa.read_redtlb(i);
+                let mut red = apic::RedTbl::new(n);
+                red.vector = (50 + i) as u8;
+                let stored = red.store();
+                ioa.write_redtlb(i, stored);
+            }
+        }
+    } else {
+        panic!("The legacy PICS are not supported!");
     }
 
     info!("Enabling interrupts...");
     x86_64::instructions::interrupts::enable();
 
     info!("Looking for AHCI devices & SFS filesystems...");
-    let ahci_devices = unsafe { ahci::find_ahci_devices(&mut mapper, &mut frame_allocator) };
+    let ahci_devices: Vec<ahci::AhciDevice> = Vec::new();
     if ahci_devices.is_empty() {
         info!("No AHCI devices found.");
     } else {
@@ -154,7 +193,7 @@ pub fn hlt_loop() -> ! {
 }
 
 #[macro_export]
-macro_rules! tty_print {
+macro_rules! print {
     ($($arg:tt)*) => {
         if let Some(t) = $crate::TTY.lock().as_mut() {
             use core::fmt::Write;
@@ -166,10 +205,10 @@ macro_rules! tty_print {
 }
 
 #[macro_export]
-macro_rules! tty_println {
-    () => ($crate::tty_print!("\n"));
-    ($fmt:expr) => ($crate::tty_print!(concat!($fmt, "\n")));
-    ($fmt:expr, $($arg:tt)*) => ($crate::tty_print!(
+macro_rules! println {
+    () => ($crate::print!("\n"));
+    ($fmt:expr) => ($crate::print!(concat!($fmt, "\n")));
+    ($fmt:expr, $($arg:tt)*) => ($crate::print!(
         concat!($fmt, "\n"), $($arg)*));
 }
 
@@ -187,17 +226,17 @@ pub fn _print(args: Arguments) {
 }
 
 #[macro_export]
-macro_rules! print {
+macro_rules! all_print {
     ($($arg:tt)*) => {
         $crate::_print(format_args!($($arg)*))
     };
 }
 
 #[macro_export]
-macro_rules! println {
-    () => ($crate::print!("\n"));
-    ($fmt:expr) => ($crate::print!(concat!($fmt, "\n")));
-    ($fmt:expr, $($arg:tt)*) => ($crate::print!(
+macro_rules! all_println {
+    () => ($crate::all_print!("\n"));
+    ($fmt:expr) => ($crate::all_print!(concat!($fmt, "\n")));
+    ($fmt:expr, $($arg:tt)*) => ($crate::all_print!(
         concat!($fmt, "\n"), $($arg)*));
 }
 
@@ -205,8 +244,8 @@ macro_rules! println {
 macro_rules! info {
     ($($arg:tt)*) => {
         #[cfg(feature = "status-faces")]
-        $crate::print!("\x1b[34m(o_o) ");
-        $crate::println!(
+        $crate::all_print!("\x1b[34m(o_o) ");
+        $crate::all_println!(
             "\x1b[34m[INFO]:\x1b[0m {}",
             format_args!($($arg)*)
         );
@@ -217,8 +256,8 @@ macro_rules! info {
 macro_rules! warning {
     ($($arg:tt)*) => {
         #[cfg(feature = "status-faces")]
-        $crate::print!("\x1b[33m(0_0) ");
-        $crate::println!(
+        $crate::all_print!("\x1b[33m(0_0) ");
+        $crate::all_println!(
             "\x1b[33m[WARNING]:\x1b[0m {}",
             format_args!($($arg)*)
         )
@@ -229,8 +268,8 @@ macro_rules! warning {
 macro_rules! error {
     ($($arg:tt)*) => {
         #[cfg(feature = "status-faces")]
-        $crate::print!("\x1b[31m(X_X) ");
-        $crate::println!(
+        $crate::all_print!("\x1b[31m(X_X) ");
+        $crate::all_println!(
             "\x1b[31m[ERROR]:\x1b[0m {}",
             format_args!($($arg)*)
         )
@@ -241,8 +280,8 @@ macro_rules! error {
 macro_rules! success {
     ($($arg:tt)*) => {
         #[cfg(feature = "status-faces")]
-        $crate::print!("\x1b[32m(^_^) ");
-        $crate::println!(
+        $crate::all_print!("\x1b[32m(^_^) ");
+        $crate::all_println!(
             "\x1b[32m[SUCCESS]:\x1b[0m {}",
             format_args!($($arg)*)
         )
@@ -253,8 +292,8 @@ macro_rules! success {
 macro_rules! nftodo {
     ($($arg:tt)*) => {
         #[cfg(feature = "status-faces")]
-        $crate::print!("\x1b[35m(-_-) ");
-        $crate::println!(
+        $crate::all_print!("\x1b[35m(-_-) ");
+        $crate::all_println!(
             "\x1b[35m[TODO]:\x1b[0m {}",
             format_args!($($arg)*)
         )
@@ -263,23 +302,19 @@ macro_rules! nftodo {
 
 #[macro_export]
 macro_rules! sad {
-    ($($arg:tt)*) => {
+    () => {
         if let Some(tty) = $crate::TTY.lock().as_mut() {
             tty.sad(Some((243, 139, 168, 255)));
         }
-        #[cfg(feature = "serial-faces")]
-        $crate::serial_print!("☹"); // this may not render in all terminals! disable the `serial-faces` feature to get rid of it.
     };
 }
 
 #[macro_export]
 macro_rules! yay {
-    ($($arg:tt)*) => {
+    () => {
         if let Some(tty) = $crate::TTY.lock().as_mut() {
             tty.yay(Some((166, 227, 161, 255)));
         }
-        #[cfg(feature = "serial-faces")]
-        $crate::serial_print!("☺"); // this may not render in all terminals! disable the `serial-faces` feature to get rid of it.
     };
 }
 
@@ -287,9 +322,8 @@ macro_rules! yay {
 #[macro_export]
 macro_rules! clear {
     () => {{
-        $crate::serial_print!("\x1B[2J\x1B[1;1H");
-        if let Some(fb) = $crate::FRAMEBUFFER.lock().as_mut() {
-            fb.clear_screen((30, 30, 46));
+        if let Some(tty) = $crate::TTY.lock().as_mut() {
+            tty.clear_tty();
         }
     }};
 }
@@ -305,7 +339,11 @@ fn panic_handler(_info: &core::panic::PanicInfo) -> ! {
         _info.location().unwrap().column()
     );
 
-    sad!();
+    if let Some(tty) = TTY.lock().as_mut() {
+        tty.sad(Some((243, 139, 168, 255)));
+    }
+    #[cfg(feature = "serial-faces")]
+    serial_print!("☹"); // this may not render in all terminals! disable the `serial-faces` feature to get rid of it.
 
     loop {}
 }

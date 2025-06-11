@@ -1,5 +1,7 @@
-use crate::{clear, error, print, println, sad, serial::get_input, warning, yay};
+use crate::{clear, error, keyboard::ScancodeStream, print, println, sad, warning, yay};
 use alloc::{format, string::*, vec, vec::Vec};
+use futures_util::StreamExt;
+use pc_keyboard::{layouts, DecodedKey, HandleControl, Keyboard, ScancodeSet1};
 use spinning_top::Spinlock;
 
 pub static COMMAND_REGISTRY: Spinlock<Option<CommandRegistry>> = Spinlock::new(None);
@@ -109,7 +111,7 @@ fn license(_registry: &CommandRegistry, _args: Vec<&str>) -> i32 {
 
 fn credits(_registry: &CommandRegistry, _args: Vec<&str>) -> i32 {
     println!(
-        "Lemoncake is developed by SniverDaBest, and uses some external crates/libraries, most of which are developed by the Rust OSDev community."
+        "Lemoncake is developed by SniverDaBest, and uses some external crates/libraries, most of which are developed by the Rust OSDev community.\nIt also uses some code from Ruddle/Fomos on GitHub for the APIC and IOAPIC."
     );
     return 0;
 }
@@ -199,6 +201,13 @@ pub async fn run_command_line() {
     let mut input_buffer = String::new();
     let mut prev_ret_code = 0;
 
+    let mut scancodes = ScancodeStream::new();
+    let mut keyboard = Keyboard::new(
+        ScancodeSet1::new(),
+        layouts::Us104Key,
+        HandleControl::Ignore,
+    );
+
     if COMMAND_REGISTRY.lock().is_some() {
         warning!("Command registry already exists. Not replacing it...");
     } else {
@@ -208,32 +217,35 @@ pub async fn run_command_line() {
     print!("[{}] > ", prev_ret_code);
 
     loop {
-        let c = get_input() as char;
-        match c {
-            '\x00' => {}
-            '\x08' => {
-                input_buffer.pop();
-            }
-            '\r' => {
-                print!("\n");
-                prev_ret_code = process_command(&input_buffer, prev_ret_code);
-                input_buffer.clear();
-                print!("[{}] > ", prev_ret_code);
-            }
-            x => {
-                input_buffer.push(x);
-                print!("{}", x);
+        while let Some(scancode) = scancodes.next().await {
+            if let Ok(Some(key_event)) = keyboard.add_byte(scancode) {
+                if let Some(key) = keyboard.process_keyevent(key_event) {
+                    match key {
+                        DecodedKey::Unicode(character) => {
+                            match character {
+                                '\u{7f}' => { input_buffer.pop(); },
+                                '\n' => {
+                                    println!();
+                                    prev_ret_code = process_command(&input_buffer, prev_ret_code);
+                                    input_buffer.clear();
+                                    print!("[{}] > ", prev_ret_code);
+                                }
+                                c => {
+                                    print!("{}", c);
+                                    input_buffer.push(c);
+                                }
+                            }
+                        },
+                        DecodedKey::RawKey(_) => {},
+                    }
+                }
             }
         }
     }
 }
 
 fn process_command(buf: &String, prev_ret_code: i32) -> i32 {
-    if buf.trim().starts_with("#") {
-        return 0;
-    }
-
-    if buf.trim().is_empty() {
+    if buf.trim().starts_with("#") || buf.trim().is_empty() {
         return prev_ret_code;
     }
 

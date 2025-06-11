@@ -1,39 +1,12 @@
-use core::arch::asm;
-use core::intrinsics::{volatile_load, volatile_store};
-use crate::{error, gdt, hlt_loop, info, sad, serial_print};
+use crate::{error, gdt, hlt_loop, info, serial_print};
 use lazy_static::lazy_static;
 use pic8259::ChainedPics;
 use spinning_top::Spinlock;
-use x86_64::PhysAddr;
-use x86_64::VirtAddr;
-use x86_64::registers::model_specific::Msr;
 use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
-use x86_64::structures::paging::PageTableFlags;
-use x86_64::structures::paging::{FrameAllocator, Mapper, Page, PhysFrame, Size4KiB};
 
 pub const PIC_1_OFFSET: u8 = 32;
 pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
 pub const USING_APIC: Spinlock<bool> = Spinlock::new(true);
-const IA32_APIC_BASE_MSR: u32 = 0x1B;
-const IA32_APIC_BASE_MSR_ENABLE: u32 = 0x800;
-const APIC_SVR_OFFSET: usize = 0xF0;
-const APIC_LVT_TIMER_OFFSET: usize = 0x320;
-const APIC_TIMER_INITCNT_OFFSET: usize = 0x380;
-const APIC_TIMER_DIV_OFFSET: usize = 0x3E0;
-const APIC_TIMER_PERIODIC: u32 = 0x20000;
-
-#[derive(Debug, Clone, Copy)]
-#[repr(u8)]
-pub enum InterruptIndex {
-    Timer = PIC_1_OFFSET,
-    Keyboard,
-}
-
-impl InterruptIndex {
-    fn as_u8(self) -> u8 {
-        self as u8
-    }
-}
 
 pub static PICS: spin::Mutex<ChainedPics> =
     spin::Mutex::new(unsafe { ChainedPics::new(PIC_1_OFFSET, PIC_2_OFFSET) });
@@ -49,11 +22,39 @@ lazy_static! {
             idt.double_fault
                 .set_handler_fn(double_fault_handler)
                 .set_stack_index(gdt::DOUBLE_FAULT_IST_INDEX);
-
-            idt[InterruptIndex::Timer.as_u8()]
-                .set_handler_fn(timer_interrupt_handler)
-                .set_stack_index(1);
         }
+
+        for i in 32..=255 {
+            idt[i].set_handler_fn(generic_interrupt_handler);
+        }
+
+        idt[48].set_handler_fn(timer_interrupt_handler);
+        idt[49].set_handler_fn(timer_interrupt_handler2);
+
+        idt[50 + 0].set_handler_fn(ioapic_handler_0);
+        idt[50 + 1].set_handler_fn(ioapic_handler_1);
+        idt[50 + 2].set_handler_fn(ioapic_handler_2);
+        idt[50 + 3].set_handler_fn(ioapic_handler_3);
+        idt[50 + 4].set_handler_fn(ioapic_handler_4);
+        idt[50 + 5].set_handler_fn(ioapic_handler_5);
+        idt[50 + 6].set_handler_fn(ioapic_handler_6);
+        idt[50 + 7].set_handler_fn(ioapic_handler_7);
+        idt[50 + 8].set_handler_fn(ioapic_handler_8);
+        idt[50 + 9].set_handler_fn(ioapic_handler_9);
+        idt[50 + 10].set_handler_fn(ioapic_handler_10);
+        idt[50 + 11].set_handler_fn(ioapic_handler_11);
+        idt[50 + 12].set_handler_fn(ioapic_handler_12);
+        idt[50 + 13].set_handler_fn(ioapic_handler_13);
+        idt[50 + 14].set_handler_fn(ioapic_handler_14);
+        idt[50 + 15].set_handler_fn(ioapic_handler_15);
+        idt[50 + 16].set_handler_fn(ioapic_handler_16);
+        idt[50 + 17].set_handler_fn(ioapic_handler_17);
+        idt[50 + 18].set_handler_fn(ioapic_handler_18);
+        idt[50 + 19].set_handler_fn(ioapic_handler_19);
+        idt[50 + 20].set_handler_fn(ioapic_handler_20);
+        idt[50 + 21].set_handler_fn(ioapic_handler_21);
+        idt[50 + 22].set_handler_fn(ioapic_handler_22);
+        idt[50 + 23].set_handler_fn(ioapic_handler_23);
 
         idt
     };
@@ -64,116 +65,231 @@ pub unsafe fn disable_pics() {
     PICS.lock().write_masks(0xFF, 0xFF);
 }
 
-unsafe fn check_apic() -> bool {
-    let mut edx: u32;
-
-    asm!(
-        "cpuid",
-        inout("eax") 1 => _,
-        lateout("edx") edx,
-    );
-
-    return (edx & (1 << 9)) != 0;
-}
-
-unsafe fn set_apic_base(apic: usize) {
-    let edx: u32 = (apic as u64 >> 32) as u32;
-    let eax: u32 = ((apic & 0xFFFFF000) | IA32_APIC_BASE_MSR_ENABLE as usize) as u32;
-    let value: u64 = ((edx as u64) << 32) | (eax as u64);
-
-    let mut msr = Msr::new(IA32_APIC_BASE_MSR);
-    msr.write(value);
-}
-
-unsafe fn get_apic_base() -> usize {
-    return get_apic_phys_base() + crate::PMO as usize;
-}
-
-unsafe fn get_apic_phys_base() -> usize {
-    let msr = Msr::new(IA32_APIC_BASE_MSR);
-    let value = msr.read();
-    let eax: u32 = value as u32;
-    let edx: u32 = (value >> 32) as u32;
-
-    return (eax as usize & 0xfffff000) | ((edx as usize & 0x0f) << 32);
-}
-
-unsafe fn read_reg(offset: usize) -> u32 {
-    return volatile_load((get_apic_base() + offset) as *const u32);
-}
-
-unsafe fn write_reg(offset: usize, value: u32) {
-   volatile_store((get_apic_base() + offset) as *mut u32, value);}
-
-unsafe fn apic_eoi() {
-    write_reg(0xB0, 0);
-}
-
-pub unsafe fn setup_pics(
-    mapper: &mut impl Mapper<Size4KiB>,
-    frame_allocator: &mut impl FrameAllocator<Size4KiB>,
-) {
-    PICS.lock().initialize();
-
-    if check_apic() {
-        info!("(APIC) Using the APIC!");
-        disable_pics();
-        init_pit(100);
-
-        let apic_phys_base = get_apic_phys_base();
-        let apic_start_frame = PhysFrame::containing_address(PhysAddr::new(apic_phys_base as u64));
-        let apic_end_frame =
-            PhysFrame::containing_address(PhysAddr::new((apic_phys_base + 0xFFF) as u64));
-        let apic_start_page = Page::containing_address(VirtAddr::new(get_apic_phys_base() as u64));
-        let apic_end_page = Page::containing_address(VirtAddr::new(get_apic_phys_base() as u64 + 0xFFF));
-        let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::NO_CACHE;
-
-        for (page, frame) in Page::range_inclusive(apic_start_page, apic_end_page)
-            .zip(PhysFrame::range_inclusive(apic_start_frame, apic_end_frame))
-        {
-            info!(
-                "(APIC) Mapping page: {:?} with flags {:?} on frame {:?}",
-                page, flags, frame
-            );
-            mapper
-                .map_to(page, frame, flags, frame_allocator)
-                .expect("(APIC) Unable to map the APIC memory region!")
-                .flush();
-        }
-
-        set_apic_base(apic_phys_base);
-
-        info!("(APIC) Using APIC version: {}", read_reg(0x30));
-
-        write_reg(0xF0, read_reg(0xF0) | 0x100);
-
-        let svr = read_reg(APIC_SVR_OFFSET);
-        write_reg(APIC_SVR_OFFSET, svr | 0x100 | (PIC_1_OFFSET as u32));
-
-        write_reg(APIC_TIMER_DIV_OFFSET, 0x0011);
-        write_reg(
-            APIC_LVT_TIMER_OFFSET,
-            APIC_TIMER_PERIODIC | (PIC_1_OFFSET as u32),
-        );
-        write_reg(APIC_TIMER_INITCNT_OFFSET, 1_000_000_000);
-    } else {
-        *USING_APIC.lock() = false;
-        info!("(PICS) Using PICS!");
+extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
     }
 }
 
-unsafe fn init_pit(frequency_hz: u32) {
-    info!("(PIT) Initializing PIT with frequency: {} Hz", frequency_hz);
-    let divisor = (1193182 / frequency_hz) as u16;
+extern "x86-interrupt" fn timer_interrupt_handler2(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
+}
+
+extern "x86-interrupt" fn generic_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
+}
+
+extern "x86-interrupt" fn ioapic_handler_0(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
+}
+extern "x86-interrupt" fn ioapic_handler_1(_stack_frame: InterruptStackFrame) {
     use x86_64::instructions::port::Port;
 
-    let mut command = Port::new(0x43);
-    let mut channel0 = Port::new(0x40);
+    let mut port = Port::new(0x60);
+    let sc: u8 = unsafe { port.read() };
 
-    command.write(0x36u8);
+    crate::keyboard::add_scancode(sc);
 
-    channel0.write((divisor & 0xFF) as u8);
-    channel0.write((divisor >> 8) as u8);
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
+}
+extern "x86-interrupt" fn ioapic_handler_2(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
+}
+extern "x86-interrupt" fn ioapic_handler_3(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
+}
+extern "x86-interrupt" fn ioapic_handler_4(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
+}
+extern "x86-interrupt" fn ioapic_handler_5(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
+}
+extern "x86-interrupt" fn ioapic_handler_6(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
+}
+extern "x86-interrupt" fn ioapic_handler_7(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
+}
+extern "x86-interrupt" fn ioapic_handler_8(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
+}
+extern "x86-interrupt" fn ioapic_handler_9(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
+}
+extern "x86-interrupt" fn ioapic_handler_10(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
+}
+extern "x86-interrupt" fn ioapic_handler_11(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
+}
+extern "x86-interrupt" fn ioapic_handler_12(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
+}
+extern "x86-interrupt" fn ioapic_handler_13(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
+}
+extern "x86-interrupt" fn ioapic_handler_14(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
+}
+extern "x86-interrupt" fn ioapic_handler_15(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
+}
+extern "x86-interrupt" fn ioapic_handler_16(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
+}
+extern "x86-interrupt" fn ioapic_handler_17(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
+}
+extern "x86-interrupt" fn ioapic_handler_18(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
+}
+extern "x86-interrupt" fn ioapic_handler_19(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
+}
+extern "x86-interrupt" fn ioapic_handler_20(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
+}
+extern "x86-interrupt" fn ioapic_handler_21(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
+}
+extern "x86-interrupt" fn ioapic_handler_22(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
+}
+extern "x86-interrupt" fn ioapic_handler_23(_stack_frame: InterruptStackFrame) {
+    unsafe {
+        crate::apic::LAPIC
+            .get()
+            .expect("(APIC) Unable to get the LAPIC!")
+            .eoi();
+    }
 }
 
 pub fn init_idt() {
@@ -197,7 +313,11 @@ extern "x86-interrupt" fn page_fault_handler(
         stack_frame
     );
 
-    sad!();
+    if let Some(tty) = crate::TTY.lock().as_mut() {
+        tty.sad(Some((243, 139, 168, 255)));
+    }
+    #[cfg(feature = "serial-faces")]
+    serial_print!("☹"); // this may not render in all terminals! disable the `serial-faces` feature to get rid of it.
 
     hlt_loop();
 }
@@ -211,33 +331,11 @@ extern "x86-interrupt" fn double_fault_handler(
         stack_frame, error_code
     );
 
-    sad!();
+    if let Some(tty) = crate::TTY.lock().as_mut() {
+        tty.sad(Some((243, 139, 168, 255)));
+    }
+    #[cfg(feature = "serial-faces")]
+    serial_print!("☹"); // this may not render in all terminals! disable the `serial-faces` feature to get rid of it.
 
     loop {}
-}
-
-#[allow(unused)]
-extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
-    serial_print!(".");
-    unsafe {
-        if *USING_APIC.lock() {
-            apic_eoi();
-        } else {
-            PICS.lock()
-                .notify_end_of_interrupt(InterruptIndex::Timer.as_u8());
-        }
-    }
-}
-
-#[allow(unused)]
-extern "x86-interrupt" fn keyboard_interrupt_handler(_stack_frame: InterruptStackFrame) {
-    use x86_64::instructions::port::Port;
-
-    let mut port = Port::new(0x60);
-    let scancode: u8 = unsafe { port.read() };
-    crate::keyboard::add_scancode(scancode);
-
-    unsafe {
-        apic_eoi();
-    }
 }
