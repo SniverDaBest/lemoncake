@@ -26,6 +26,7 @@ pub mod interrupts;
 pub mod keyboard;
 pub mod memory;
 pub mod pci;
+pub mod png;
 pub mod serial;
 
 use crate::memory::BootInfoFrameAllocator;
@@ -89,6 +90,12 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     let mut mapper = unsafe { memory::init(VirtAddr::new(PMO)) };
     let mut frame_allocator = unsafe { BootInfoFrameAllocator::init(&info.memory_regions) };
 
+    info!("Initializing heap...");
+    allocator::init_heap(&mut mapper, &mut frame_allocator).expect("Unable to initialize heap!");
+    
+    info!("Displaying logo...");
+    png::draw_png(include_bytes!("../../assets/logo.png"), 1206, 0);
+
     info!("Initializing GDT...");
     gdt::init();
 
@@ -106,9 +113,6 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     unsafe {
         setup_pics(&mut mapper, &mut frame_allocator);
     }
-
-    info!("Initializing heap...");
-    allocator::init_heap(&mut mapper, &mut frame_allocator).expect("Unable to initialize heap!");
 
     info!("Enabling interrupts...");
     x86_64::instructions::interrupts::enable();
@@ -261,7 +265,7 @@ macro_rules! nftodo {
 macro_rules! sad {
     ($($arg:tt)*) => {
         if let Some(tty) = $crate::TTY.lock().as_mut() {
-            tty.sad(Some((243, 139, 168)));
+            tty.sad(Some((243, 139, 168, 255)));
         }
         #[cfg(feature = "serial-faces")]
         $crate::serial_print!("☹"); // this may not render in all terminals! disable the `serial-faces` feature to get rid of it.
@@ -272,7 +276,7 @@ macro_rules! sad {
 macro_rules! yay {
     ($($arg:tt)*) => {
         if let Some(tty) = $crate::TTY.lock().as_mut() {
-            tty.yay(Some((166, 227, 161)));
+            tty.yay(Some((166, 227, 161, 255)));
         }
         #[cfg(feature = "serial-faces")]
         $crate::serial_print!("☺"); // this may not render in all terminals! disable the `serial-faces` feature to get rid of it.

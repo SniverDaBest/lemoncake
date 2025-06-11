@@ -47,7 +47,7 @@ impl Framebuffer {
 
     pub fn draw_bitmap(
         &mut self,
-        bitmap: &[(u8, u8, u8)],
+        bitmap: &[(u8, u8, u8, u8)],
         width: usize,
         height: usize,
         x: usize,
@@ -61,44 +61,51 @@ impl Framebuffer {
             for col in 0..width {
                 let pixel_index = row * width + col;
                 if pixel_index < bitmap.len() {
-                    self.put_pixel(x + col, y + row, bitmap[pixel_index]);
+                    let (r, g, b, a) = bitmap[pixel_index];
+                    if a != 0 {
+                        self.put_pixel(x + col, y + row, (r, g, b));
+                    }
                 }
             }
         }
     }
 
-    pub fn draw_smiley(&mut self, x: usize, y: usize, color: (u8, u8, u8)) {
+    pub fn draw_smiley(&mut self, x: usize, y: usize, color: (u8, u8, u8, u8)) {
+        let (r, g, b, a) = color;
+        if a == 0 { return; }
         // left eye
-        self.put_pixel(x + 1, y, color);
-        self.put_pixel(x + 1, y + 1, color);
+        self.put_pixel(x + 1, y, (r, g, b));
+        self.put_pixel(x + 1, y + 1, (r, g, b));
         // right eye
-        self.put_pixel(x + 5, y, color);
-        self.put_pixel(x + 5, y + 1, color);
+        self.put_pixel(x + 5, y, (r, g, b));
+        self.put_pixel(x + 5, y + 1, (r, g, b));
         // mouth
-        self.put_pixel(x + 0, y + 4, color);
-        self.put_pixel(x + 1, y + 5, color);
-        self.put_pixel(x + 2, y + 5, color);
-        self.put_pixel(x + 3, y + 5, color);
-        self.put_pixel(x + 4, y + 5, color);
-        self.put_pixel(x + 5, y + 5, color);
-        self.put_pixel(x + 6, y + 4, color);
+        self.put_pixel(x + 0, y + 4, (r, g, b));
+        self.put_pixel(x + 1, y + 5, (r, g, b));
+        self.put_pixel(x + 2, y + 5, (r, g, b));
+        self.put_pixel(x + 3, y + 5, (r, g, b));
+        self.put_pixel(x + 4, y + 5, (r, g, b));
+        self.put_pixel(x + 5, y + 5, (r, g, b));
+        self.put_pixel(x + 6, y + 4, (r, g, b));
     }
 
-    pub fn draw_sad_face(&mut self, x: usize, y: usize, color: (u8, u8, u8)) {
+    pub fn draw_sad_face(&mut self, x: usize, y: usize, color: (u8, u8, u8, u8)) {
+        let (r, g, b, a) = color;
+        if a == 0 { return; }
         // left eye
-        self.put_pixel(x + 1, y, color);
-        self.put_pixel(x + 1, y + 1, color);
+        self.put_pixel(x + 1, y, (r, g, b));
+        self.put_pixel(x + 1, y + 1, (r, g, b));
         // right eye
-        self.put_pixel(x + 5, y, color);
-        self.put_pixel(x + 5, y + 1, color);
+        self.put_pixel(x + 5, y, (r, g, b));
+        self.put_pixel(x + 5, y + 1, (r, g, b));
         // mouth
-        self.put_pixel(x + 0, y + 5, color);
-        self.put_pixel(x + 1, y + 4, color);
-        self.put_pixel(x + 2, y + 4, color);
-        self.put_pixel(x + 3, y + 4, color);
-        self.put_pixel(x + 4, y + 4, color);
-        self.put_pixel(x + 5, y + 4, color);
-        self.put_pixel(x + 6, y + 5, color);
+        self.put_pixel(x + 0, y + 5, (r, g, b));
+        self.put_pixel(x + 1, y + 4, (r, g, b));
+        self.put_pixel(x + 2, y + 4, (r, g, b));
+        self.put_pixel(x + 3, y + 4, (r, g, b));
+        self.put_pixel(x + 4, y + 4, (r, g, b));
+        self.put_pixel(x + 5, y + 4, (r, g, b));
+        self.put_pixel(x + 6, y + 5, (r, g, b));
     }
 
     pub fn resolution(&self) -> (usize, usize) {
@@ -114,7 +121,7 @@ pub struct TTY {
     text_buf: &'static mut [char],
     cursor_x: usize,
     cursor_y: usize,
-    fg_color: (u8, u8, u8),
+    fg_color: (u8, u8, u8, u8),
 }
 
 impl TTY {
@@ -134,11 +141,11 @@ impl TTY {
             text_buf: buffer,
             cursor_x: 0,
             cursor_y: 0,
-            fg_color: (255, 255, 255),
+            fg_color: (255, 255, 255, 255),
         };
     }
 
-    pub fn set_char(&mut self, x: usize, y: usize, c: char, color: (u8, u8, u8)) {
+    pub fn set_char(&mut self, x: usize, y: usize, c: char, color: (u8, u8, u8, u8)) {
         if x >= self.width || y >= self.height {
             return;
         }
@@ -174,19 +181,19 @@ impl TTY {
                             let code = core::str::from_utf8(&num_buf[..num_len]).unwrap_or("0");
                             let code = code.parse::<u8>().unwrap_or(0);
                             self.fg_color = match code {
-                                30 => (0, 0, 0),       // Black
-                                31 => (243, 139, 168), // Red
-                                32 => (166, 227, 161), // Green
-                                33 => (249, 226, 175), // Yellow
-                                34 => (137, 180, 250), // Blue
-                                35 => (203, 166, 247), // Magenta
-                                36 => (0, 170, 170),   // Cyan
-                                37 => (255, 255, 255), // White
-                                0 => (205, 214, 244),  // Reset
+                                30 => (0, 0, 0, 255),       // Black
+                                31 => (243, 139, 168, 255), // Red
+                                32 => (166, 227, 161, 255), // Green
+                                33 => (249, 226, 175, 255), // Yellow
+                                34 => (137, 180, 250, 255), // Blue
+                                35 => (203, 166, 247, 255), // Magenta
+                                36 => (0, 170, 170, 255),   // Cyan
+                                37 => (255, 255, 255, 255), // White
+                                0 => (205, 214, 244, 255),  // Reset
                                 _ => self.fg_color,
                             };
                         } else {
-                            self.fg_color = (205, 214, 244);
+                            self.fg_color = (205, 214, 244, 255);
                         }
                         continue;
                     }
@@ -219,7 +226,7 @@ impl TTY {
         return (self.cursor_x * 8, self.cursor_y * 8);
     }
 
-    pub fn yay(&mut self, color: Option<(u8, u8, u8)>) {
+    pub fn yay(&mut self, color: Option<(u8, u8, u8, u8)>) {
         let (x, y) = self.get_cur_loc();
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
             fb.draw_smiley(x, y, color.unwrap_or(self.fg_color));
@@ -234,7 +241,7 @@ impl TTY {
         }
     }
 
-    pub fn sad(&mut self, color: Option<(u8, u8, u8)>) {
+    pub fn sad(&mut self, color: Option<(u8, u8, u8, u8)>) {
         let (x, y) = self.get_cur_loc();
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
             fb.draw_sad_face(x, y, color.unwrap_or(self.fg_color));

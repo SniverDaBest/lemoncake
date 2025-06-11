@@ -1,7 +1,5 @@
 use core::arch::asm;
 use core::intrinsics::{volatile_load, volatile_store};
-use core::ptr::{read_volatile, write_volatile};
-
 use crate::{error, gdt, hlt_loop, info, sad, serial_print};
 use lazy_static::lazy_static;
 use pic8259::ChainedPics;

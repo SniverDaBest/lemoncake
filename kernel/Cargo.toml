@@ -18,6 +18,10 @@ uart_16550 = "0.3.2"
 volatile = "0.2.6"
 x86_64 = "0.15.2"
 
+[dependencies.zune-png]
+version = "0.4.10"
+default-features = false
+
 [dependencies.lazy_static]
 version = "1.5.0"
 features = ["spin_no_std"]
