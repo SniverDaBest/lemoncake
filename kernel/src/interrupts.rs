@@ -1,4 +1,5 @@
 use core::arch::asm;
+use core::intrinsics::{volatile_load, volatile_store};
 use core::ptr::{read_volatile, write_volatile};
 
 use crate::{error, gdt, hlt_loop, info, sad, serial_print};
@@ -17,7 +18,6 @@ pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
 pub const USING_APIC: Spinlock<bool> = Spinlock::new(true);
 const IA32_APIC_BASE_MSR: u32 = 0x1B;
 const IA32_APIC_BASE_MSR_ENABLE: u32 = 0x800;
-const APIC_VIRT_BASE: u64 = 0xFFFF_FF00_0000_0000;
 const APIC_SVR_OFFSET: usize = 0xF0;
 const APIC_LVT_TIMER_OFFSET: usize = 0x320;
 const APIC_TIMER_INITCNT_OFFSET: usize = 0x380;
@@ -88,7 +88,7 @@ unsafe fn set_apic_base(apic: usize) {
 }
 
 unsafe fn get_apic_base() -> usize {
-    return APIC_VIRT_BASE as usize;
+    return get_apic_phys_base() + crate::PMO as usize;
 }
 
 unsafe fn get_apic_phys_base() -> usize {
@@ -101,16 +101,11 @@ unsafe fn get_apic_phys_base() -> usize {
 }
 
 unsafe fn read_reg(offset: usize) -> u32 {
-    let apic_base = get_apic_base();
-    let reg_ptr = (apic_base + offset) as *const u32;
-    return read_volatile(reg_ptr);
+    return volatile_load((get_apic_base() + offset) as *const u32);
 }
 
 unsafe fn write_reg(offset: usize, value: u32) {
-    let apic_base = get_apic_base();
-    let reg_ptr = (apic_base + offset) as *mut u32;
-    write_volatile(reg_ptr, value);
-}
+   volatile_store((get_apic_base() + offset) as *mut u32, value);}
 
 unsafe fn apic_eoi() {
     write_reg(0xB0, 0);
@@ -131,8 +126,8 @@ pub unsafe fn setup_pics(
         let apic_start_frame = PhysFrame::containing_address(PhysAddr::new(apic_phys_base as u64));
         let apic_end_frame =
             PhysFrame::containing_address(PhysAddr::new((apic_phys_base + 0xFFF) as u64));
-        let apic_start_page = Page::containing_address(VirtAddr::new(APIC_VIRT_BASE));
-        let apic_end_page = Page::containing_address(VirtAddr::new(APIC_VIRT_BASE + 0xFFF));
+        let apic_start_page = Page::containing_address(VirtAddr::new(get_apic_phys_base() as u64));
+        let apic_end_page = Page::containing_address(VirtAddr::new(get_apic_phys_base() as u64 + 0xFFF));
         let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::NO_CACHE;
 
         for (page, frame) in Page::range_inclusive(apic_start_page, apic_end_page)
@@ -149,6 +144,8 @@ pub unsafe fn setup_pics(
         }
 
         set_apic_base(apic_phys_base);
+
+        info!("(APIC) Using APIC version: {}", read_reg(0x30));
 
         write_reg(0xF0, read_reg(0xF0) | 0x100);
 

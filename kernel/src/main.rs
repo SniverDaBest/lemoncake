@@ -49,6 +49,8 @@ pub static BOOTLOADER_CONFIG: BootloaderConfig = {
     config
 };
 
+pub static mut PMO: u64 = 0;
+
 entry_point!(kernel_main, config = &BOOTLOADER_CONFIG);
 
 pub static FRAMEBUFFER: Spinlock<Option<Framebuffer>> = Spinlock::new(None);
@@ -75,12 +77,16 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
 
     warning!("This is a hobby project. Don't expect it to be stable, secure, or even work.");
 
-    info!("Getting mapping & frame allocator...");
     let pmo = info
         .physical_memory_offset
         .into_option()
         .expect("No physical memory offset found!");
-    let mut mapper = unsafe { memory::init(VirtAddr::new(pmo)) };
+    unsafe { PMO = pmo; }
+
+    info!("Physical memory offset: {:#X}", pmo);
+
+    info!("Getting mapping & frame allocator...");
+    let mut mapper = unsafe { memory::init(VirtAddr::new(PMO)) };
     let mut frame_allocator = unsafe { BootInfoFrameAllocator::init(&info.memory_regions) };
 
     info!("Initializing GDT...");
