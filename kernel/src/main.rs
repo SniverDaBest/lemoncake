@@ -4,8 +4,8 @@
 #![allow(unsafe_op_in_unsafe_fn, internal_features, clippy::needless_return)]
 
 /* TODO:
- * Fix APIC/PICS
- * Shutting down the system (w/o force closing Qemu, VBox, etc.)
+ * Scroll down when TTY cursor y pos >= TTY height
+ * Shutting down the system through AHCI
  * Usermode
  * Support running apps (in usermode)
  * A C/C++ library (like glibc or musl)
@@ -15,10 +15,10 @@
 extern crate alloc;
 
 pub mod acpi;
-pub mod ahci;
 pub mod allocator;
 pub mod apic;
 pub mod commandline;
+pub mod disks;
 pub mod display;
 pub mod executor;
 pub mod font;
@@ -31,17 +31,22 @@ pub mod pci;
 pub mod png;
 pub mod serial;
 
-use alloc::vec::Vec;
+use alloc::{sync::Arc, vec::Vec};
 use bootloader_api::config::{BootloaderConfig, Mapping};
 use bootloader_api::{BootInfo, entry_point};
 use commandline::run_command_line;
 use core::error;
 use core::fmt::{Arguments, Write};
+use disks::ahci::AHCIController;
 use display::{Framebuffer, TTY};
 use executor::{Executor, Task};
+use keyboard::ScancodeStream;
 use memory::BootInfoFrameAllocator;
+use spin::Mutex;
 use spinning_top::Spinlock;
 use x86_64::{PhysAddr, VirtAddr};
+
+use crate::fs::Filesystem;
 
 pub static BOOTLOADER_CONFIG: BootloaderConfig = {
     let mut config = BootloaderConfig::new_default();
@@ -108,7 +113,6 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
         )
         .expect("Unable to get ACPI tables from the RSDP!")
     };
-    info!("ACPI revision: {}", tables.revision());
 
     info!("Initializing IDT & GDT...");
     interrupts::init_idt();
@@ -156,32 +160,44 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     info!("Enabling interrupts...");
     x86_64::instructions::interrupts::enable();
 
-    info!("Looking for AHCI devices & SFS filesystems...");
-    let ahci_devices: Vec<ahci::AhciDevice> = Vec::new();
-    if ahci_devices.is_empty() {
-        info!("No AHCI devices found.");
-    } else {
-        for mut device in ahci_devices {
-            info!(
-                "Found AHCI controller at {}:{}.{}",
-                device.pci_device.bus, device.pci_device.device_id, device.pci_device.func
-            );
+    info!("Initializing scancode queue...");
+    let scancodes = Arc::new(Mutex::new(ScancodeStream::new()));
 
-            for port in &device.ports {
-                if port.is_implemented {
-                    info!("  Port {}: Type {}", port.port_number, port.port_type);
-                }
-            }
-            device
-                .init(&mut mapper, &mut frame_allocator)
-                .expect("Unable to initialize AHCI device!");
+    info!("Looking for AHCI devices...");
+    let devices = disks::ahci::scan_for_ahci_controllers();
+    let mut ahci_devs: Vec<AHCIController> = Vec::new();
+
+    for dev in devices {
+        info!("PCI Device:\n{:#?}", dev);
+        let c = unsafe { AHCIController::from_pci(dev, &mut mapper, &mut frame_allocator) };
+        if c.is_some() {
+            ahci_devs.push(c.unwrap());
         }
     }
 
-    success!("Done setting up!");
+    info!("Found {} AHCI devices in total.", ahci_devs.len());
+
+    info!("Scanning for SFS filesystems...");
+    for dev in ahci_devs.iter_mut() {
+        info!("Ports: {:?}", dev.ports);
+        if let Some(mut sfs) = fs::sfs::SFS::probe_on_device(dev) {
+            match sfs.mount() {
+                Ok(_) => {
+                    info!("Mounted SFS filesystem on device!");
+                }
+                Err(e) => {
+                    error!("Failed to mount SFS! Error: {:?}", e);
+                }
+            }
+        } else {
+            info!("No SFS filesystem found on device");
+        }
+    }
+
+    info!("Done setting up!");
 
     let mut e = Executor::new();
-    e.spawn(Task::new(run_command_line()));
+    e.spawn(Task::new(run_command_line(scancodes)));
     e.run();
 }
 
@@ -244,9 +260,13 @@ macro_rules! all_println {
 macro_rules! info {
     ($($arg:tt)*) => {
         #[cfg(feature = "status-faces")]
-        $crate::all_print!("\x1b[34m(o_o) ");
         $crate::all_println!(
-            "\x1b[34m[INFO]:\x1b[0m {}",
+            "\x1b[34m(o_o) [INFO ]:\x1b[0m {}",
+            format_args!($($arg)*)
+        );
+        #[cfg(not(feature = "status-faces"))]
+        $crate::all_println!(
+            "\x1b[34m[INFO ]:\x1b[0m {}",
             format_args!($($arg)*)
         );
     };
@@ -256,9 +276,13 @@ macro_rules! info {
 macro_rules! warning {
     ($($arg:tt)*) => {
         #[cfg(feature = "status-faces")]
-        $crate::all_print!("\x1b[33m(0_0) ");
         $crate::all_println!(
-            "\x1b[33m[WARNING]:\x1b[0m {}",
+            "\x1b[33m(0_0) [WARN ]:\x1b[0m {}",
+            format_args!($($arg)*)
+        );
+        #[cfg(not(feature = "status-faces"))]
+        $crate::all_println!(
+            "\x1b[33m[WARN ]:\x1b[0m {}",
             format_args!($($arg)*)
         )
     };
@@ -268,21 +292,13 @@ macro_rules! warning {
 macro_rules! error {
     ($($arg:tt)*) => {
         #[cfg(feature = "status-faces")]
-        $crate::all_print!("\x1b[31m(X_X) ");
+        $crate::all_println!(
+            "\x1b[31m(X_X) [ERROR]:\x1b[0m {}",
+            format_args!($($arg)*)
+        );
+        #[cfg(not(feature = "status-faces"))]
         $crate::all_println!(
             "\x1b[31m[ERROR]:\x1b[0m {}",
-            format_args!($($arg)*)
-        )
-    };
-}
-
-#[macro_export]
-macro_rules! success {
-    ($($arg:tt)*) => {
-        #[cfg(feature = "status-faces")]
-        $crate::all_print!("\x1b[32m(^_^) ");
-        $crate::all_println!(
-            "\x1b[32m[SUCCESS]:\x1b[0m {}",
             format_args!($($arg)*)
         )
     };
@@ -292,9 +308,13 @@ macro_rules! success {
 macro_rules! nftodo {
     ($($arg:tt)*) => {
         #[cfg(feature = "status-faces")]
-        $crate::all_print!("\x1b[35m(-_-) ");
         $crate::all_println!(
-            "\x1b[35m[TODO]:\x1b[0m {}",
+            "\x1b[35m(-_-) [TODO ]:\x1b[0m {}",
+            format_args!($($arg)*)
+        );
+        #[cfg(not(feature = "status-faces"))]
+        $crate::all_println!(
+            "\x1b[35m[TODO ]:\x1b[0m {}",
             format_args!($($arg)*)
         )
     };
@@ -339,11 +359,12 @@ fn panic_handler(_info: &core::panic::PanicInfo) -> ! {
         _info.location().unwrap().column()
     );
 
+    #[cfg(feature = "serial-faces")]
+    serial_print!("☹"); // this may not render in all terminals! disable the `serial-faces` feature to get rid of it.
+
     if let Some(tty) = TTY.lock().as_mut() {
         tty.sad(Some((243, 139, 168, 255)));
     }
-    #[cfg(feature = "serial-faces")]
-    serial_print!("☹"); // this may not render in all terminals! disable the `serial-faces` feature to get rid of it.
 
     loop {}
 }

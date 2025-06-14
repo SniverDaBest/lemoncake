@@ -1,10 +1,12 @@
 //! SFS - Simple Filesystem (created by Brendan Trotter)
 use super::{FSError, FSResult, Filesystem};
-use crate::{ahci::AhciDevice, error, nftodo, success, warning};
+use crate::info;
+use crate::{disks::ahci::AHCIController, error, nftodo, warning};
+use alloc::boxed::Box;
 use alloc::{format, string::*, vec, vec::*};
 
 #[derive(Debug)]
-#[allow(dead_code)]
+#[allow(unused)]
 pub struct SuperBlock {
     last_alt_time: u64,
     /// Size is in *blocks*, not bytes.
@@ -57,8 +59,9 @@ impl SuperBlock {
             return false;
         }
 
-        if self.block_sz != 2 ^ (self.block_sz + 7) {
-            error!("(SFS) Block size is incorrect!");
+        let block_sz_bytes = self.block_sz_bytes();
+        if block_sz_bytes < 512 || block_sz_bytes > (128 * 1024) {
+            error!("(SFS) Block size is out of supported range!");
             return false;
         }
 
@@ -153,20 +156,44 @@ impl IndexArea {
 }
 
 pub struct SFS<'a> {
-    device: &'a mut AhciDevice,
+    device: &'a mut AHCIController,
     superblock: &'a mut SuperBlock,
     mounted: bool,
     index_area: Option<IndexArea>,
 }
 
 impl<'a> SFS<'a> {
-    pub fn new(device: &'a mut AhciDevice, superblock: &'a mut SuperBlock) -> Self {
+    pub fn new(device: &'a mut AHCIController, superblock: &'a mut SuperBlock) -> Self {
         return Self {
             device,
             superblock,
             mounted: false,
             index_area: None,
         };
+    }
+
+    /// Probe the given AHCI device for an SFS superblock. Returns Some(SFS) if valid, None otherwise.
+    pub fn probe_on_device(device: &'a mut AHCIController) -> Option<SFS<'a>> {
+        if device.ports.len() == 0 {
+            error!("(SFS) Device doesn't have any ports to read from!");
+            return None;
+        }
+
+        let mut buf = [0u8; 512];
+        if !device.read_sector(device.ports[0].port_num, 0, &mut buf) {
+            error!("(SFS) Failed to read sector 0 for superblock probe");
+            return None;
+        }
+
+        let superblock = SuperBlock::from_bytes(&buf)?;
+        if !superblock.validate_superblock() {
+            error!("(SFS) Superblock validation failed");
+            return None;
+        }
+
+        let boxed_sb = Box::new(superblock);
+        let sb_ref: &'a mut SuperBlock = Box::leak(boxed_sb);
+        Some(SFS::new(device, sb_ref))
     }
 
     pub fn load_index_area(&mut self) -> FSResult<IndexArea> {
@@ -203,7 +230,7 @@ impl<'a> SFS<'a> {
 
         let block_size = self.superblock.block_sz_bytes();
 
-        let index_area = self.index_area.as_ref()?; // Safely access the index area
+        let index_area = self.index_area.as_ref()?;
 
         for i in data_area_start..=data_area_end - num_blocks as u64 {
             let mut free = true;
@@ -297,7 +324,7 @@ impl<'a> Filesystem for SFS<'a> {
             return Err(FSError::AlreadyMounted);
         }
 
-        if self.superblock.validate_superblock() {
+        if !self.superblock.validate_superblock() {
             error!("(SFS) Superblock is invalid!");
             return Err(FSError::BadFS);
         }
@@ -306,7 +333,7 @@ impl<'a> Filesystem for SFS<'a> {
         self.index_area = Some(index);
 
         self.mounted = true;
-        success!("(SFS) Mounted!");
+        info!("(SFS) Mounted!");
 
         warning!("(SFS) Mounting/Unmounting doesn't really do anything... yet.");
 
@@ -343,7 +370,7 @@ impl<'a> Filesystem for SFS<'a> {
         let start_sector = offset / sector_size;
         let end_sector = (offset + file_size + sector_size - 1) / sector_size;
 
-        let mut file_buf = vec![0u8; end_sector - start_sector * sector_size];
+        let mut file_buf = vec![0u8; (end_sector - start_sector) * sector_size];
         for i in start_sector..end_sector {
             let mut sector_buf = [0u8; 512];
 
@@ -412,6 +439,8 @@ impl<'a> Filesystem for SFS<'a> {
             start_block: start_block as u32,
             sz_bytes: buf.len() as u16, // FIXME: split into continuation entries if >64KB
         };
+
+        nftodo!("(SFS) Files >64KB will NOT be split into continuation entries!");
 
         index.insert_entry(&entry)?;
 

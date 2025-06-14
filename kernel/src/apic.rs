@@ -4,10 +4,7 @@ use crate::PMO;
 use conquer_once::spin::OnceCell;
 use core::intrinsics::{volatile_load, volatile_store};
 use raw_cpuid::{CpuId, CpuIdResult};
-use x86_64::{
-    PhysAddr, VirtAddr,
-    registers::model_specific::Msr,
-};
+use x86_64::{PhysAddr, VirtAddr, registers::model_specific::Msr};
 
 pub fn cpuid() -> Option<CpuId> {
     Some(CpuId::with_cpuid_fn(|a, c| {

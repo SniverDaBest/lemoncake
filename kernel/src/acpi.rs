@@ -1,4 +1,4 @@
-use crate::{PMO, nftodo};
+use crate::PMO;
 use acpi::PhysicalMapping;
 use core::ptr::NonNull;
 
@@ -21,7 +21,5 @@ impl ::acpi::AcpiHandler for Handler {
         )
     }
 
-    fn unmap_physical_region<T>(_region: &PhysicalMapping<Self, T>) {
-        nftodo!("(ACPI) Implement unmapping physical ACPI region");
-    }
+    fn unmap_physical_region<T>(_region: &PhysicalMapping<Self, T>) {}
 }

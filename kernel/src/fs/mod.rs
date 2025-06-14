@@ -1,6 +1,7 @@
 //pub mod fat;
 pub mod sfs;
 use alloc::vec::Vec;
+use core::fmt::{self, Display, Formatter};
 
 #[derive(Debug)]
 pub enum FSError {
@@ -21,6 +22,30 @@ pub enum FSError {
     NoSpace,
     NameTooLong,
     DirectoryNotEmpty,
+}
+
+impl Display for FSError {
+    fn fmt(&self, f: &mut Formatter) -> fmt::Result {
+        match self {
+            Self::ReadError => write!(f, "Read Error"),
+            Self::WriteError => write!(f, "Write Error"),
+            Self::MountError => write!(f, "Mount Error"),
+            Self::UnmountError => write!(f, "Unmount Error"),
+            Self::BadFS => write!(f, "Bad File System"),
+            Self::NotMounted => write!(f, "File System Not Mounted"),
+            Self::AlreadyMounted => write!(f, "File System Already Mounted"),
+            Self::NotADirectory => write!(f, "Not a Directory"),
+            Self::NotAFile => write!(f, "Not a File"),
+            Self::BadPath => write!(f, "Bad Path"),
+            Self::NotFound => write!(f, "Not Found"),
+            Self::AlreadyExists => write!(f, "Already Exists"),
+            Self::BadFile => write!(f, "Bad File"),
+            Self::BadDirectory => write!(f, "Bad Directory"),
+            Self::NoSpace => write!(f, "No Space Available"),
+            Self::NameTooLong => write!(f, "Name Too Long"),
+            Self::DirectoryNotEmpty => write!(f, "Directory Not Empty"),
+        }
+    }
 }
 
 pub type FSResult<T> = Result<T, FSError>;

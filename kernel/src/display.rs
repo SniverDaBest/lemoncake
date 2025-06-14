@@ -165,7 +165,7 @@ impl TTY {
 
     pub fn clear_tty(&mut self) {
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-            fb.clear_screen((30,30,46));
+            fb.clear_screen((30, 30, 46));
         }
         self.cursor_x = 0;
         self.cursor_y = 0;
@@ -230,7 +230,7 @@ impl TTY {
                 self.cursor_y += 1;
             }
             if self.cursor_y >= self.height {
-                self.cursor_y = 0;
+                self.clear_tty(); // TODO: scroll down
             }
         }
     }

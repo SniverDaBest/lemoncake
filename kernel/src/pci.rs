@@ -57,15 +57,12 @@ impl fmt::Display for PCIDevice {
 pub fn write_pci(offset: u8, pci_device: &PCIDevice, value: u32) {
     let address = (1 << 31)
         | ((pci_device.bus as u32) << 16)
-        | ((pci_device.slot as u32) << 11)  // Slot should be correct
+        | ((pci_device.slot as u32) << 11)
         | ((pci_device.func as u32) << 8)
         | ((offset as u32) & 0xFC);
 
     unsafe {
-        // Write to PCI address port
         core::arch::asm!("out dx, eax", in("dx") 0xCF8, in("eax") address);
-
-        // Write to PCI data port
         core::arch::asm!("out dx, eax", in("dx") 0xCFC, in("eax") value);
     }
 }
@@ -74,19 +71,21 @@ pub fn write_pci(offset: u8, pci_device: &PCIDevice, value: u32) {
 pub fn read_pci(offset: u8, pci_device: &PCIDevice) -> u32 {
     let address = (1 << 31)
         | ((pci_device.bus as u32) << 16)
-        | ((pci_device.slot as u32) << 11)  // This should be slot instead of device_id
+        | ((pci_device.slot as u32) << 11)
         | ((pci_device.func as u32) << 8)
         | ((offset as u32) & 0xFC);
 
     unsafe {
-        // Write to PCI address port
         core::arch::asm!("out dx, eax", in("dx") 0xCF8, in("eax") address);
 
-        // Read from PCI data port
         let data: u32;
         core::arch::asm!("in eax, dx", in("dx") 0xCFC, out("eax") data);
         data
     }
+}
+
+pub fn bar5(pci_device: &PCIDevice) -> u32 {
+    return read_pci(0x24, pci_device);
 }
 
 /// Reads from the PCI config space via the IO ports.

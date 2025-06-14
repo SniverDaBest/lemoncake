@@ -1,8 +1,10 @@
 use crate::{clear, error, keyboard::ScancodeStream, print, println, sad, warning, yay};
-use alloc::{format, string::*, vec, vec::Vec};
+use alloc::{format, string::*, sync::Arc, vec, vec::*};
 use futures_util::StreamExt;
-use pc_keyboard::{layouts, DecodedKey, HandleControl, Keyboard, ScancodeSet1};
+use pc_keyboard::{DecodedKey, HandleControl, Keyboard, ScancodeSet1, layouts};
+use spin::Mutex;
 use spinning_top::Spinlock;
+use x86_64::instructions::port::Port;
 
 pub static COMMAND_REGISTRY: Spinlock<Option<CommandRegistry>> = Spinlock::new(None);
 
@@ -145,6 +147,29 @@ fn help(registry: &CommandRegistry, _args: Vec<&str>) -> i32 {
     return 0;
 }
 
+fn shutdown(_registry: &CommandRegistry, args: Vec<&str>) -> i32 {
+    if args.len() != 1 {
+        println!(
+            "Usage:\n  shutdown <vm_type>\n  poweroff <vm_type>\nExamples:\n  shutdown qemu\n  shutdown bochs\n  poweroff vbox\n  poweroff old_qemu\nNote: old_qemu is the same as bochs."
+        );
+        return 1;
+    }
+
+    unsafe {
+        match args[0].to_lowercase().as_str() {
+            "qemu" => Port::new(0x604).write(0x2000 as u32),
+            "bochs" | "old_qemu" => Port::new(0xB004).write(0x2000 as u32),
+            "vbox" | "virtualbox" => Port::new(0x4004).write(0x3400 as u32),
+            t => println!(
+                "Type \"{}\" is invalid!\nUsage:\n  shutdown <vm_type>\n  poweroff <vm_type>\nExamples:\n  shutdown qemu\n  shutdown bochs\n  poweroff vbox\n  poweroff old_qemu\nNote: old_qemu is the same as bochs.",
+                t
+            ),
+        }
+    }
+
+    return 0;
+}
+
 fn panic_(_registry: &CommandRegistry, _args: Vec<&str>) -> i32 {
     panic!("Panic initiated from command line.");
 }
@@ -177,6 +202,12 @@ fn init_command_registry() -> CommandRegistry {
     );
     let whoami_cmd = Command::new("whoami", vec![], "Tells you who you are.", whoami);
     let panic_cmd = Command::new("panic", vec![], "Panics the system.", panic_);
+    let shutdown_cmd = Command::new(
+        "shutdown",
+        vec!["poweroff"],
+        "Powers off the VM. (does not work on real hw!)",
+        shutdown,
+    );
     let help_cmd = Command::new(
         "help",
         vec!["hlep", "h", "?"],
@@ -192,16 +223,17 @@ fn init_command_registry() -> CommandRegistry {
     reg.push(clear_cmd);
     reg.push(whoami_cmd);
     reg.push(panic_cmd);
+    reg.push(shutdown_cmd);
     reg.push(help_cmd);
 
     return reg;
 }
 
-pub async fn run_command_line() {
+pub async fn run_command_line(scancodes: Arc<Mutex<ScancodeStream>>) {
     let mut input_buffer = String::new();
     let mut prev_ret_code = 0;
+    let mut scs = scancodes.lock();
 
-    let mut scancodes = ScancodeStream::new();
     let mut keyboard = Keyboard::new(
         ScancodeSet1::new(),
         layouts::Us104Key,
@@ -217,26 +249,26 @@ pub async fn run_command_line() {
     print!("[{}] > ", prev_ret_code);
 
     loop {
-        while let Some(scancode) = scancodes.next().await {
+        while let Some(scancode) = scs.next().await {
             if let Ok(Some(key_event)) = keyboard.add_byte(scancode) {
                 if let Some(key) = keyboard.process_keyevent(key_event) {
                     match key {
-                        DecodedKey::Unicode(character) => {
-                            match character {
-                                '\u{7f}' => { input_buffer.pop(); },
-                                '\n' => {
-                                    println!();
-                                    prev_ret_code = process_command(&input_buffer, prev_ret_code);
-                                    input_buffer.clear();
-                                    print!("[{}] > ", prev_ret_code);
-                                }
-                                c => {
-                                    print!("{}", c);
-                                    input_buffer.push(c);
-                                }
+                        DecodedKey::Unicode(character) => match character {
+                            '\u{7f}' => {
+                                input_buffer.pop();
+                            }
+                            '\n' => {
+                                println!();
+                                prev_ret_code = process_command(&input_buffer, prev_ret_code);
+                                input_buffer.clear();
+                                print!("[{}] > ", prev_ret_code);
+                            }
+                            c => {
+                                print!("{}", c);
+                                input_buffer.push(c);
                             }
                         },
-                        DecodedKey::RawKey(_) => {},
+                        DecodedKey::RawKey(_) => {}
                     }
                 }
             }
