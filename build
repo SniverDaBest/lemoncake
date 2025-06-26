@@ -110,7 +110,13 @@ function build() {
         cp grub.cfg bin/iso/boot/grub/
         cp bin/kernel.bin bin/iso/boot/
 
-        grub2-mkrescue -o lemoncake.iso bin/iso
+        if [ command_exists grub-mkrescue ]; then
+            grub-mkrescue -o lemoncake.iso bin/iso
+        elif [ comman_exists grub2-mkrescue ]; then
+            grub2-mkrescue -o lemoncake.iso bin/iso
+        else
+            echo "Please install grub-mkrescue! (on distros like Fedora, please install grub2-mkrescue)"
+        fi
     fi
 }
 
