@@ -1,3 +1,6 @@
+>[!IMPORTANT]
+> This is the `old` branch. This stuff isn't maintained anymore!
+
 # Info
 Lemoncake is a small OS, that was originally called `lemonade`. However, I have come to dislike that name, and dislike the rest of the codebase. So, it's been scrapped, and it's renamed.\
 \
