@@ -1,8 +1,5 @@
 [![](https://tokei.rs/b1/github/SniverDaBest/lemoncake)](https://github.com/SniverDaBest/lemoncake)
 
->[!NOTE]
-> This is the `new-bootloader-testing` branch. I'm trying to use the new version of the `bootloader` crate, instead of GRUB, because of UEFI compatibility reasons.
-
 # Info
 Lemoncake is a small OS, that was originally called `lemonade`. However, I have come to dislike that name, and dislike the rest of the codebase. So, it's been scrapped, and it's renamed.\
 \
