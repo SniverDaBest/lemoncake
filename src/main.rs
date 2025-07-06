@@ -39,7 +39,7 @@ fn main() {
     #[cfg(target_os = "linux")]
     cmd.arg("-enable-kvm");
 
-    cmd.arg("-m").arg("1G");
+    cmd.arg("-m").arg("4G");
     cmd.arg("-serial").arg("stdio");
     cmd.arg("-drive")
         .arg("id=disk,file=hd.img,if=none,format=raw");

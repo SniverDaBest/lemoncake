@@ -1,3 +1,5 @@
+# TODO: make sure this works on BSD
+
 import platform
 import os
 import sys
@@ -8,17 +10,33 @@ LINUX = "Linux"
 WINDOWS = "Windows"
 MAC = "Darwin"
 
-print(f"(o_o) INFO: Running on {p if p != MAC else "MacOS"}")
+print(f"\x1b[34m(o_o) [INFO ]: Running on {p if p != MAC else 'MacOS'}")
 
-if p != LINUX: print(f"(0_o) WARNING: The only OS this supports is Linux. Windows users can use WSL2, and MacOS users can... figure that out themselves.", file=sys.stderr)
+if p != LINUX and p != MAC: print(f"\x1b[33m(0_0) [WARN ]: The only OS this supports is Linux and (kinda) MacOS.. Windows users can use WSL2, or use a better OS (linux)", file=sys.stderr)
 
 os.system("rustup target add x86_64-unknown-none && rustup component add llvm-tools rust-src")
 
 if not os.path.exists("hd.img"):
-    print("Creating new HD image...")
+    print("\x1b[34m(o_o) [INFO ]: Creating new HD image...\x1b[0m")
     if p == WINDOWS: os.system("qemu-img create hd.img 512M")
     elif p == LINUX or p == MAC: os.system("dd if=/dev/zero of=hd.img bs=1M count=512")
 
-    if p == LINUX: os.system("mkfs.fat -F 32 hd.img") # idfk if MacOS has this, so it's going to be linux exclusive. (i don't have a mac; i'm broke)
-    else: print("Unsupported platform. Can't format HD image!", file=sys.stderr)
-else: print("HD image already exists.")
+    if p != WINDOWS: os.system("mkfs.fat -F 32 hd.img") # apparently macos does have mkfs.fat :D
+    else: print("\x1b[31m(X_X) [ERROR]: Unsupported platform. Can't format HD image!", file=sys.stderr)
+else: print("\x1b[34m(o_o) [INFO ]: HD image already exists.")
+
+if not os.path.exists("init"):
+    print("\x1b[34m(o_o) [INFO ]: Compiling init program...")
+    ret = os.system("nasm -felf64 init.asm")
+    if ret == 0:
+        print("\x1b[34m(o_o) [INFO ]: Successfully compiled the init program!")
+        if p != WINDOWS:
+            ret = os.system("ld -o init init.o")
+            if ret != 0: print("\x1b[31m(X_X) [ERROR]: Failed to link the init prorgam!", file=sys.stderr) # i'm 99% sure everyone (who isn't on windows) has ld
+            else: print("\x1b[34m(o_o) [INFO ]: Successfully linked the init program!")
+    elif ret == 127:
+        print("\x1b[31m(X_X) [ERROR]: Please install nasm to compile the init program!", file=sys.stderr)
+    else:
+        print("\x1b[31m(X_X) [ERROR]: Unable to compile the init program!", file=sys.stderr)
+else: print("\x1b[34m(o_o) [INFO ]: Init program already compiled.")
+

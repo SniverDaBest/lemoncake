@@ -17,6 +17,8 @@ lazy_static! {
 
         idt.breakpoint.set_handler_fn(breakpoint_handler);
         idt.page_fault.set_handler_fn(page_fault_handler);
+        idt.general_protection_fault
+            .set_handler_fn(gp_fault_handler);
 
         unsafe {
             idt.double_fault
@@ -328,6 +330,36 @@ extern "x86-interrupt" fn double_fault_handler(
 ) -> ! {
     error!(
         "\nUh-oh! The Lemoncake kernel double-faulted.\nHere's the stack frame:\n{:#?}\nError Code: {}",
+        stack_frame, error_code
+    );
+
+    if let Some(tty) = crate::TTY.lock().as_mut() {
+        tty.sad(Some((243, 139, 168, 255)));
+    }
+    #[cfg(feature = "serial-faces")]
+    serial_print!("☹"); // this may not render in all terminals! disable the `serial-faces` feature to get rid of it.
+
+    loop {}
+}
+
+extern "x86-interrupt" fn gp_fault_handler(stack_frame: InterruptStackFrame, error_code: u64) {
+    error!(
+        "\nUh-oh! The Lemoncake kernel GP-faulted.\nHere's the stack frame:\n{:#?}\nError Code: {}",
+        stack_frame, error_code
+    );
+
+    if let Some(tty) = crate::TTY.lock().as_mut() {
+        tty.sad(Some((243, 139, 168, 255)));
+    }
+    #[cfg(feature = "serial-faces")]
+    serial_print!("☹"); // this may not render in all terminals! disable the `serial-faces` feature to get rid of it.
+
+    loop {}
+}
+
+extern "x86-interrupt" fn seg_fault_handler(stack_frame: InterruptStackFrame, error_code: u64) {
+    error!(
+        "\nUh-oh! The Lemoncake kernel segfaulted.\nHere's the stack frame:\n{:#?}\nError Code: {}",
         stack_frame, error_code
     );
 

@@ -1,6 +1,8 @@
 use alloc::alloc::{GlobalAlloc, Layout};
 use bump::BumpAllocator;
 use core::ptr::null_mut;
+use fixed_size_block::FixedSizeBlockAllocator;
+use linked_list::LinkedListAllocator;
 use x86_64::{
     VirtAddr,
     structures::paging::{

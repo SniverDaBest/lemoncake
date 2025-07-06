@@ -1,6 +1,6 @@
 #![no_std]
 #![no_main]
-#![feature(core_intrinsics, abi_x86_interrupt)]
+#![feature(core_intrinsics, abi_x86_interrupt, str_from_raw_parts)]
 #![allow(unsafe_op_in_unsafe_fn, internal_features, clippy::needless_return)]
 
 /* TODO:
@@ -20,6 +20,7 @@ pub mod apic;
 pub mod commandline;
 pub mod disks;
 pub mod display;
+pub mod elf;
 pub mod executor;
 pub mod font;
 pub mod fs;
@@ -30,23 +31,31 @@ pub mod memory;
 pub mod pci;
 pub mod png;
 pub mod serial;
+pub mod syscall;
 
 use alloc::{sync::Arc, vec::Vec};
 use bootloader_api::config::{BootloaderConfig, Mapping};
 use bootloader_api::{BootInfo, entry_point};
 use commandline::run_command_line;
+use core::arch::asm;
 use core::error;
+use core::ffi::CStr;
 use core::fmt::{Arguments, Write};
 use disks::ahci::AHCIController;
 use display::{Framebuffer, TTY};
+use elf::load_elf;
 use executor::{Executor, Task};
+use fs::Filesystem;
 use keyboard::ScancodeStream;
 use memory::BootInfoFrameAllocator;
 use spin::Mutex;
 use spinning_top::Spinlock;
+use x86_64::registers::control::{Cr3, Efer, EferFlags};
+use x86_64::registers::model_specific::{LStar, Msr, Star};
+use x86_64::structures::paging::{
+    FrameAllocator, Mapper, OffsetPageTable, Page, PageTableFlags, Size4KiB,
+};
 use x86_64::{PhysAddr, VirtAddr};
-
-use crate::fs::Filesystem;
 
 pub static BOOTLOADER_CONFIG: BootloaderConfig = {
     let mut config = BootloaderConfig::new_default();
@@ -163,7 +172,7 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     info!("Initializing scancode queue...");
     let scancodes = Arc::new(Mutex::new(ScancodeStream::new()));
 
-    info!("Looking for AHCI devices...");
+    /*info!("Looking for AHCI devices...");
     let devices = disks::ahci::scan_for_ahci_controllers();
     let mut ahci_devs: Vec<AHCIController> = Vec::new();
 
@@ -192,13 +201,76 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
         } else {
             info!("No SFS filesystem found on device");
         }
+    }*/
+
+    info!("Setting up syscalls...");
+    unsafe {
+        syscall::init_syscalls();
     }
 
-    info!("Done setting up!");
+    info!("Loading init program...");
+    let e = load_elf(
+        include_bytes!("../../init"),
+        &mut mapper,
+        &mut frame_allocator,
+    )
+    .expect("Unable to get init program address!");
+
+    info!("Mapping the user stack...");
+    map_user_stack(&mut mapper, &mut frame_allocator);
+
+    info!("Switching to usermode at {:#x}...", e);
+    unsafe {
+        switch_to_user(e.as_u64(), 0x7FFF_FFFF_F000);
+    }
 
     let mut e = Executor::new();
     e.spawn(Task::new(run_command_line(scancodes)));
     e.run();
+}
+
+pub fn map_user_stack(
+    mapper: &mut impl Mapper<Size4KiB>,
+    frame_allocator: &mut impl FrameAllocator<Size4KiB>,
+) {
+    let user_stack_start = VirtAddr::new(0x7FFF_FFFF_D000);
+    let user_stack_end = VirtAddr::new(0x7FFF_FFFF_E000);
+
+    info!("User stack range:");
+    info!("{:?} - {:?}", user_stack_start, user_stack_end);
+
+    let page_range = Page::range_inclusive(
+        Page::containing_address(user_stack_start),
+        Page::containing_address(user_stack_end),
+    );
+
+    for page in page_range {
+        let frame = frame_allocator
+            .allocate_frame()
+            .expect("Unable to allocate frame for user stack!");
+        unsafe {
+            mapper
+                .map_to(
+                    page,
+                    frame,
+                    PageTableFlags::PRESENT
+                        | PageTableFlags::WRITABLE
+                        | PageTableFlags::USER_ACCESSIBLE,
+                    frame_allocator,
+                )
+                .expect("Unable to map the user stack!")
+                .flush();
+        }
+    }
+}
+
+pub unsafe fn switch_to_user(entry: u64, user_stack_top: u64) {
+    Efer::update(|e| *e |= EferFlags::SYSTEM_CALL_EXTENSIONS);
+    let star = ((0x1Bu64) << 48) | ((0x08u64) << 32);
+    Msr::new(0xC000_0081).write(star);
+    Msr::new(0xC000_0082).write(entry);
+    Msr::new(0xC000_0084).write(0x0000_0000_0000_0001);
+    syscall::jump_to_usermode(entry, user_stack_top);
 }
 
 pub fn hlt_loop() -> ! {
@@ -257,14 +329,20 @@ macro_rules! all_println {
 }
 
 #[macro_export]
+#[cfg(feature = "status-faces")]
 macro_rules! info {
     ($($arg:tt)*) => {
-        #[cfg(feature = "status-faces")]
         $crate::all_println!(
             "\x1b[34m(o_o) [INFO ]:\x1b[0m {}",
             format_args!($($arg)*)
         );
-        #[cfg(not(feature = "status-faces"))]
+    };
+}
+
+#[macro_export]
+#[cfg(not(feature = "status-faces"))]
+macro_rules! info {
+    ($($arg:tt)*) => {
         $crate::all_println!(
             "\x1b[34m[INFO ]:\x1b[0m {}",
             format_args!($($arg)*)
@@ -273,50 +351,68 @@ macro_rules! info {
 }
 
 #[macro_export]
+#[cfg(feature = "status-faces")]
 macro_rules! warning {
     ($($arg:tt)*) => {
-        #[cfg(feature = "status-faces")]
         $crate::all_println!(
             "\x1b[33m(0_0) [WARN ]:\x1b[0m {}",
             format_args!($($arg)*)
         );
-        #[cfg(not(feature = "status-faces"))]
-        $crate::all_println!(
-            "\x1b[33m[WARN ]:\x1b[0m {}",
-            format_args!($($arg)*)
-        )
     };
 }
 
 #[macro_export]
+#[cfg(not(feature = "status-faces"))]
+macro_rules! warning {
+    ($($arg:tt)*) => {
+        $crate::all_println!(
+            "\x1b[33m[WARN ]:\x1b[0m {}",
+            format_args!($($arg)*)
+        );
+    };
+}
+
+#[macro_export]
+#[cfg(feature = "status-faces")]
 macro_rules! error {
     ($($arg:tt)*) => {
-        #[cfg(feature = "status-faces")]
         $crate::all_println!(
             "\x1b[31m(X_X) [ERROR]:\x1b[0m {}",
             format_args!($($arg)*)
         );
-        #[cfg(not(feature = "status-faces"))]
-        $crate::all_println!(
-            "\x1b[31m[ERROR]:\x1b[0m {}",
-            format_args!($($arg)*)
-        )
     };
 }
 
 #[macro_export]
+#[cfg(not(feature = "status-faces"))]
+macro_rules! error {
+    ($($arg:tt)*) => {
+        $crate::all_println!(
+            "\x1b[31m[ERROR]:\x1b[0m {}",
+            format_args!($($arg)*)
+        );
+    };
+}
+
+#[macro_export]
+#[cfg(feature = "status-faces")]
 macro_rules! nftodo {
     ($($arg:tt)*) => {
-        #[cfg(feature = "status-faces")]
         $crate::all_println!(
             "\x1b[35m(-_-) [TODO ]:\x1b[0m {}",
             format_args!($($arg)*)
         );
-        #[cfg(not(feature = "status-faces"))]
+    };
+}
+
+#[macro_export]
+#[cfg(not(feature = "status-faces"))]
+macro_rules! nftodo {
+    ($($arg:tt)*) => {
         $crate::all_println!(
             "\x1b[35m[TODO ]:\x1b[0m {}",
             format_args!($($arg)*)
-        )
+        );
     };
 }
 
@@ -367,4 +463,69 @@ fn panic_handler(_info: &core::panic::PanicInfo) -> ! {
     }
 
     loop {}
+}
+
+#[unsafe(no_mangle)]
+#[doc(hidden)]
+extern "C" fn _info(message: *const u8) {
+    if message.is_null() {
+        info!("<C FFI> NULL!");
+    }
+    let cstr = unsafe { CStr::from_ptr(message as *const i8) };
+    match cstr.to_str() {
+        Ok(s) => info!("<C FFI> {}", s),
+        Err(_) => info!("<C FFI> Invalid UTF-8!"),
+    }
+}
+
+#[unsafe(no_mangle)]
+#[doc(hidden)]
+extern "C" fn _warning(message: *const u8) {
+    if message.is_null() {
+        warning!("<C FFI> NULL!");
+    }
+    let cstr = unsafe { CStr::from_ptr(message as *const i8) };
+    match cstr.to_str() {
+        Ok(s) => warning!("<C FFI> {}", s),
+        Err(_) => warning!("<C FFI> Invalid UTF-8!"),
+    }
+}
+
+#[unsafe(no_mangle)]
+#[doc(hidden)]
+extern "C" fn _error(message: *const u8) {
+    if message.is_null() {
+        error!("<C FFI> NULL!");
+    }
+    let cstr = unsafe { CStr::from_ptr(message as *const i8) };
+    match cstr.to_str() {
+        Ok(s) => error!("<C FFI> {}", s),
+        Err(_) => error!("<C FFI> Invalid UTF-8!"),
+    }
+}
+
+#[unsafe(no_mangle)]
+#[doc(hidden)]
+extern "C" fn _nftodo(message: *const u8) {
+    if message.is_null() {
+        nftodo!("<C FFI> NULL!");
+    }
+    let cstr = unsafe { CStr::from_ptr(message as *const i8) };
+    match cstr.to_str() {
+        Ok(s) => nftodo!("<C FFI> {}", s),
+        Err(_) => nftodo!("<C FFI> Invalid UTF-8!"),
+    }
+}
+
+#[unsafe(no_mangle)]
+#[doc(hidden)]
+extern "C" fn _panic(message: *const u8) {
+    if message.is_null() {
+        panic!("<C FFI> NULL!");
+    }
+    let cstr = unsafe { CStr::from_ptr(message as *const i8) };
+    match cstr.to_str() {
+        Ok(s) => panic!("<C FFI> {}", s),
+        Err(_) => panic!("<C FFI> Invalid UTF-8!"),
+    }
 }
