@@ -20,6 +20,17 @@ lazy_static! {
             stack_end
         };
 
+        tss.privilege_stack_table[0] = {
+            const KSTACK_SIZE: usize = 4096 * 5;
+            #[repr(align(16))]
+            struct KStack([u8; KSTACK_SIZE]);
+            static mut KSTACK: KStack = KStack([0; KSTACK_SIZE]);
+            #[allow(static_mut_refs)]
+            let stack_start = VirtAddr::from_ptr(unsafe { &KSTACK.0 as *const _ });
+            let stack_end = stack_start + KSTACK_SIZE as u64;
+            stack_end
+        };
+
         tss
     };
 }

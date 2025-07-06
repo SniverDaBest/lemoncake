@@ -5,9 +5,8 @@
 
 /* TODO:
  * Scroll down when TTY cursor y pos >= TTY height
- * Shutting down the system through AHCI
- * Usermode
- * Support running apps (in usermode)
+ * Shutting down the system through ACPI
+ * Working usermode
  * A C/C++ library (like glibc or musl)
  * Support external drivers
  */
