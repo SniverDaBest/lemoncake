@@ -43,9 +43,9 @@ fn main() {
     cmd.arg("-serial").arg("stdio");
     cmd.arg("-drive")
         .arg("id=disk,file=hd.img,if=none,format=raw");
-    cmd.arg("-device").arg("ahci,id=ahci");
-    cmd.arg("-device").arg("ide-hd,drive=disk,bus=ahci.0");
+    cmd.arg("-device").arg("nvme,drive=disk,serial=deadbabe");
     cmd.arg("-machine").arg("q35");
+    cmd.arg("-vga").arg("virtio");
 
     let mut child = cmd.spawn().unwrap();
     child.wait().unwrap();

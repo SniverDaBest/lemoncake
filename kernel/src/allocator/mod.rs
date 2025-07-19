@@ -1,12 +1,11 @@
 use alloc::alloc::{GlobalAlloc, Layout};
 use bump::BumpAllocator;
 use core::ptr::null_mut;
-use fixed_size_block::FixedSizeBlockAllocator;
-use linked_list::LinkedListAllocator;
 use x86_64::{
-    VirtAddr,
+    PhysAddr, VirtAddr,
     structures::paging::{
-        FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB, mapper::MapToError,
+        FrameAllocator, Mapper, Page, PageTableFlags, PhysFrame, Size4KiB,
+        mapper::{MapToError, UnmapError},
     },
 };
 
@@ -82,4 +81,85 @@ impl<A> Locked<A> {
 /// Requires that `align` is a power of two.
 fn align_up(addr: usize, align: usize) -> usize {
     (addr + align - 1) & !(align - 1)
+}
+
+pub fn alloc_pages(
+    mapper: &mut impl Mapper<Size4KiB>,
+    frame_allocator: &mut impl FrameAllocator<Size4KiB>,
+    num_pages: usize,
+) -> Option<VirtAddr> {
+    static mut NEXT_VIRT: u64 = 0xffff_9000_0000_0000;
+    let base;
+    unsafe {
+        base = NEXT_VIRT;
+        NEXT_VIRT += (num_pages as u64) * 4096;
+    }
+
+    for i in 0..num_pages {
+        let virt = VirtAddr::new(base + (i as u64) * 4096);
+        let phys = frame_allocator.allocate_frame()?;
+        let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
+        unsafe {
+            mapper
+                .map_to(Page::containing_address(virt), phys, flags, frame_allocator)
+                .ok()?
+                .flush();
+        }
+    }
+    Some(VirtAddr::new(base))
+}
+
+pub fn map_page(
+    mapper: &mut impl Mapper<Size4KiB>,
+    virt_addr: u64,
+    phys_addr: u64,
+    flags: PageTableFlags,
+) -> Result<(), MapToError<Size4KiB>> {
+    let page = Page::containing_address(VirtAddr::new(virt_addr));
+    let frame = PhysFrame::containing_address(PhysAddr::new(phys_addr));
+    unsafe {
+        mapper
+            .map_to(page, frame, flags, &mut crate::memory::EmptyFrameAllocator)?
+            .flush();
+    }
+    Ok(())
+}
+
+pub fn unmap_page(mapper: &mut impl Mapper<Size4KiB>, virt_addr: u64) -> Result<(), UnmapError> {
+    let page = Page::containing_address(VirtAddr::new(virt_addr));
+    mapper.unmap(page)?.1.flush();
+    return Ok(());
+}
+
+pub fn alloc(
+    mapper: &mut impl Mapper<Size4KiB>,
+    frame_allocator: &mut impl FrameAllocator<Size4KiB>,
+    num_bytes: usize,
+) -> Option<VirtAddr> {
+    if num_bytes == 0 {
+        return None;
+    }
+
+    let page_count = (num_bytes + 4095) / 4096;
+    return alloc_pages(mapper, frame_allocator, page_count);
+}
+
+pub fn free(
+    mapper: &mut impl Mapper<Size4KiB>,
+    virt_addr: VirtAddr,
+    num_bytes: usize,
+) -> Result<(), UnmapError> {
+    if virt_addr.is_null() || num_bytes == 0 {
+        return Ok(());
+    }
+
+    let num_pages = (num_bytes + 4095) / 4096;
+
+    for i in 0..num_pages {
+        let virt = virt_addr + i as u64 * 4096;
+        let page = Page::containing_address(virt);
+        mapper.unmap(page)?.1.flush();
+    }
+
+    return Ok(());
 }

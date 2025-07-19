@@ -1,3 +1,5 @@
+use core::sync::atomic::{AtomicU64, Ordering};
+
 use crate::{error, gdt, hlt_loop, info, serial_print};
 use lazy_static::lazy_static;
 use pic8259::ChainedPics;
@@ -7,6 +9,7 @@ use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, Pag
 pub const PIC_1_OFFSET: u8 = 32;
 pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
 pub const USING_APIC: Spinlock<bool> = Spinlock::new(true);
+pub static TICK_COUNT: AtomicU64 = AtomicU64::new(0);
 
 pub static PICS: spin::Mutex<ChainedPics> =
     spin::Mutex::new(unsafe { ChainedPics::new(PIC_1_OFFSET, PIC_2_OFFSET) });
@@ -68,6 +71,8 @@ pub unsafe fn disable_pics() {
 }
 
 extern "x86-interrupt" fn timer_interrupt_handler(_stack_frame: InterruptStackFrame) {
+    TICK_COUNT.store(TICK_COUNT.load(Ordering::Relaxed) + 1, Ordering::Relaxed);
+
     unsafe {
         crate::apic::LAPIC
             .get()
@@ -345,21 +350,6 @@ extern "x86-interrupt" fn double_fault_handler(
 extern "x86-interrupt" fn gp_fault_handler(stack_frame: InterruptStackFrame, error_code: u64) {
     error!(
         "\nUh-oh! The Lemoncake kernel GP-faulted.\nHere's the stack frame:\n{:#?}\nError Code: {}",
-        stack_frame, error_code
-    );
-
-    if let Some(tty) = crate::TTY.lock().as_mut() {
-        tty.sad(Some((243, 139, 168, 255)));
-    }
-    #[cfg(feature = "serial-faces")]
-    serial_print!("☹"); // this may not render in all terminals! disable the `serial-faces` feature to get rid of it.
-
-    loop {}
-}
-
-extern "x86-interrupt" fn seg_fault_handler(stack_frame: InterruptStackFrame, error_code: u64) {
-    error!(
-        "\nUh-oh! The Lemoncake kernel segfaulted.\nHere's the stack frame:\n{:#?}\nError Code: {}",
         stack_frame, error_code
     );
 

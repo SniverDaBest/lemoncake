@@ -18,6 +18,14 @@ uart_16550 = "0.3.2"
 volatile = "0.2.6"
 x86_64 = "0.15.2"
 
+[dependencies.strum]
+version = "0.27.1"
+default-features = false
+
+[dependencies.strum_macros]
+version = "0.27.1"
+default-features = false
+
 [dependencies.goblin]
 version = "0.10.0"
 default-features = false

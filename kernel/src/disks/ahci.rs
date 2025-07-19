@@ -1,7 +1,9 @@
+#![allow(unused)]
+
 use super::*;
 use crate::{
-    error, info, nftodo,
-    pci::{PCIDevice, bar5, scan_pci_bus},
+    error, info,
+    pci::{PCIDevice, read_bar, scan_pci_bus},
 };
 use alloc::{boxed::Box, vec::Vec};
 use bitfield::bitfield;
@@ -697,7 +699,7 @@ impl AHCIController {
             return None;
         }
 
-        let abar_addr = bar5(&pci_dev);
+        let abar_addr = read_bar(&pci_dev, 5).expect("(AHCI) Unable to get the ABAR address!");
         info!("(AHCI) BAR5 (ABAR) address: 0x{:x}", abar_addr);
 
         info!("(AHCI) Mapping the ABAR...");
@@ -852,7 +854,7 @@ impl AHCIController {
                 port_num, lba
             );
         }
-        result
+        return result;
     }
 
     /// True on success, false on fail.

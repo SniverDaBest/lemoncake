@@ -1,4 +1,4 @@
-use crate::{error, gdt::GDT, info, nftodo, println, warning};
+use crate::{error, gdt::GDT, info, nftodo, println, sleep::Sleep, warning};
 use core::{arch::asm, str};
 use x86_64::{
     VirtAddr,
@@ -22,6 +22,7 @@ unsafe extern "C" fn syscall_entry() {
 }
 
 #[unsafe(no_mangle)]
+#[allow(unused)]
 unsafe extern "C" fn syscall_handler(
     rax: usize,
     rdi: usize,
@@ -44,7 +45,11 @@ unsafe extern "C" fn syscall_handler(
             return rdx;
         }
         2 => {
-            panic!("{}", str::from_raw_parts(rsi as *const u8, rdx));
+            panic!("{}", str::from_raw_parts(rdi as *const u8, rsi));
+        }
+        3 => {
+            Sleep::ms(rdi as u64);
+            return 0;
         }
         i => {
             error!("(SYSCALL) Invalid syscall number {}!", i);
@@ -54,16 +59,13 @@ unsafe extern "C" fn syscall_handler(
 }
 
 pub unsafe fn jump_to_usermode(entry: u64, user_stack: u64) {
-    let rflags = 0x202;
-
     asm!(
         "mov rcx, {entry}",
         "mov rsp, {stack}",
-        "mov r11, {rflags}",
+        "mov r11, 0x202",
         "sysretq",
         entry = in(reg) entry,
         stack = in(reg) user_stack,
-        rflags = in(reg) rflags,
         options(noreturn)
     );
 }

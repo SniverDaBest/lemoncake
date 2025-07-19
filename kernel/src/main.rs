@@ -30,30 +30,24 @@ pub mod memory;
 pub mod pci;
 pub mod png;
 pub mod serial;
+pub mod sleep;
 pub mod syscall;
 
-use alloc::{sync::Arc, vec::Vec};
+use alloc::sync::Arc;
 use bootloader_api::config::{BootloaderConfig, Mapping};
 use bootloader_api::{BootInfo, entry_point};
 use commandline::run_command_line;
-use core::arch::asm;
 use core::error;
-use core::ffi::CStr;
 use core::fmt::{Arguments, Write};
-use disks::ahci::AHCIController;
 use display::{Framebuffer, TTY};
-use elf::load_elf;
 use executor::{Executor, Task};
-use fs::Filesystem;
 use keyboard::ScancodeStream;
 use memory::BootInfoFrameAllocator;
 use spin::Mutex;
 use spinning_top::Spinlock;
-use x86_64::registers::control::{Cr3, Efer, EferFlags};
-use x86_64::registers::model_specific::{LStar, Msr, Star};
-use x86_64::structures::paging::{
-    FrameAllocator, Mapper, OffsetPageTable, Page, PageTableFlags, Size4KiB,
-};
+use x86_64::registers::control::{Efer, EferFlags};
+use x86_64::registers::model_specific::Msr;
+use x86_64::structures::paging::{FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB};
 use x86_64::{PhysAddr, VirtAddr};
 
 pub static BOOTLOADER_CONFIG: BootloaderConfig = {
@@ -134,7 +128,7 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     if let ::acpi::InterruptModel::Apic(apic) = pi.interrupt_model {
         info!("Using APIC!");
         let lapic = unsafe { apic::LocalApic::init(PhysAddr::new(apic.local_apic_address)) };
-        let mut freq = 1000_000_000;
+        let mut freq = 1000_000;
         if let Some(cpuid) = apic::cpuid() {
             if let Some(tsc) = cpuid.get_tsc_info() {
                 freq = tsc.nominal_frequency();
@@ -143,16 +137,11 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
         unsafe {
             lapic.set_div_conf(0b1011);
             lapic.set_lvt_timer((1 << 17) + 48);
-            lapic.set_init_count(freq / 1000);
+            lapic.set_init_count(freq);
         }
 
         for ioapic in apic.io_apics.iter() {
-            info!("Found IOAPIC at 0x{:x}", ioapic.address);
             let ioa = apic::IoApic::init(ioapic);
-            let ver = ioa.read(apic::IOAPICVER);
-            let id = ioa.read(apic::IOAPICVER);
-            info!("  IOAPIC version: {}", ver);
-            info!("  IOAPIC id: {}", id);
             for i in 0..24 {
                 let n = ioa.read_redtlb(i);
                 let mut red = apic::RedTbl::new(n);
@@ -200,7 +189,7 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
         } else {
             info!("No SFS filesystem found on device");
         }
-    }*/
+    }
 
     info!("Setting up syscalls...");
     unsafe {
@@ -221,6 +210,11 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     info!("Switching to usermode at {:#x}...", e);
     unsafe {
         switch_to_user(e.as_u64(), 0x7FFF_FFFF_F000);
+    }*/
+
+    info!("Checking for NVME devices...");
+    unsafe {
+        disks::nvme::nvme_init(&mut mapper, &mut frame_allocator);
     }
 
     let mut e = Executor::new();
@@ -334,7 +328,7 @@ macro_rules! info {
         $crate::all_println!(
             "\x1b[34m(o_o) [INFO ]:\x1b[0m {}",
             format_args!($($arg)*)
-        );
+        )
     };
 }
 
@@ -345,7 +339,7 @@ macro_rules! info {
         $crate::all_println!(
             "\x1b[34m[INFO ]:\x1b[0m {}",
             format_args!($($arg)*)
-        );
+        )
     };
 }
 
@@ -356,7 +350,7 @@ macro_rules! warning {
         $crate::all_println!(
             "\x1b[33m(0_0) [WARN ]:\x1b[0m {}",
             format_args!($($arg)*)
-        );
+        )
     };
 }
 
@@ -367,7 +361,7 @@ macro_rules! warning {
         $crate::all_println!(
             "\x1b[33m[WARN ]:\x1b[0m {}",
             format_args!($($arg)*)
-        );
+        )
     };
 }
 
@@ -378,7 +372,7 @@ macro_rules! error {
         $crate::all_println!(
             "\x1b[31m(X_X) [ERROR]:\x1b[0m {}",
             format_args!($($arg)*)
-        );
+        )
     };
 }
 
@@ -389,7 +383,7 @@ macro_rules! error {
         $crate::all_println!(
             "\x1b[31m[ERROR]:\x1b[0m {}",
             format_args!($($arg)*)
-        );
+        )
     };
 }
 
@@ -400,7 +394,7 @@ macro_rules! nftodo {
         $crate::all_println!(
             "\x1b[35m(-_-) [TODO ]:\x1b[0m {}",
             format_args!($($arg)*)
-        );
+        )
     };
 }
 
@@ -462,69 +456,4 @@ fn panic_handler(_info: &core::panic::PanicInfo) -> ! {
     }
 
     loop {}
-}
-
-#[unsafe(no_mangle)]
-#[doc(hidden)]
-extern "C" fn _info(message: *const u8) {
-    if message.is_null() {
-        info!("<C FFI> NULL!");
-    }
-    let cstr = unsafe { CStr::from_ptr(message as *const i8) };
-    match cstr.to_str() {
-        Ok(s) => info!("<C FFI> {}", s),
-        Err(_) => info!("<C FFI> Invalid UTF-8!"),
-    }
-}
-
-#[unsafe(no_mangle)]
-#[doc(hidden)]
-extern "C" fn _warning(message: *const u8) {
-    if message.is_null() {
-        warning!("<C FFI> NULL!");
-    }
-    let cstr = unsafe { CStr::from_ptr(message as *const i8) };
-    match cstr.to_str() {
-        Ok(s) => warning!("<C FFI> {}", s),
-        Err(_) => warning!("<C FFI> Invalid UTF-8!"),
-    }
-}
-
-#[unsafe(no_mangle)]
-#[doc(hidden)]
-extern "C" fn _error(message: *const u8) {
-    if message.is_null() {
-        error!("<C FFI> NULL!");
-    }
-    let cstr = unsafe { CStr::from_ptr(message as *const i8) };
-    match cstr.to_str() {
-        Ok(s) => error!("<C FFI> {}", s),
-        Err(_) => error!("<C FFI> Invalid UTF-8!"),
-    }
-}
-
-#[unsafe(no_mangle)]
-#[doc(hidden)]
-extern "C" fn _nftodo(message: *const u8) {
-    if message.is_null() {
-        nftodo!("<C FFI> NULL!");
-    }
-    let cstr = unsafe { CStr::from_ptr(message as *const i8) };
-    match cstr.to_str() {
-        Ok(s) => nftodo!("<C FFI> {}", s),
-        Err(_) => nftodo!("<C FFI> Invalid UTF-8!"),
-    }
-}
-
-#[unsafe(no_mangle)]
-#[doc(hidden)]
-extern "C" fn _panic(message: *const u8) {
-    if message.is_null() {
-        panic!("<C FFI> NULL!");
-    }
-    let cstr = unsafe { CStr::from_ptr(message as *const i8) };
-    match cstr.to_str() {
-        Ok(s) => panic!("<C FFI> {}", s),
-        Err(_) => panic!("<C FFI> Invalid UTF-8!"),
-    }
 }

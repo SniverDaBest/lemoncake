@@ -1,4 +1,4 @@
-use crate::{error, info};
+use crate::error;
 use goblin::elf::program_header::PT_LOAD;
 use x86_64::{
     VirtAddr,
@@ -53,7 +53,8 @@ pub fn load_elf(
                         flags | PageTableFlags::WRITABLE,
                         frame_allocator,
                     )
-                    .expect("(ELF) Unable to map a page!");
+                    .expect("(ELF) Unable to map a page!")
+                    .flush();
             }
 
             let virt_addr = page.start_address().as_u64() as *mut u8;
