@@ -4,13 +4,13 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <meta name="darkreader-lock">
-    <script src="{{ url_for('static', filename='main.js') }}" defer></script>
-    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <script src="assets/main.js" defer></script>
+    <link rel="stylesheet" href="assets/style.css">
     <title>Lemoncake</title>
 </head>
 <body>
     <div id="top">
-        <img src="{{ url_for('static', filename='logo.png') }}" id="lcklogo" onclick="gohome();">
+        <img src="assets/logo.png" id="lcklogo" onclick="gohome();">
         <p id="lcktext" onclick="gohome();">Lemoncake</p>
     </div>
 
@@ -67,7 +67,7 @@
                 <dl>
                     <dt><span id="mauve"></span> serial-faces</dt>
                     <dd><span id="peach"></span> When the system panics or faults, a sad face will appear through the serial terminal. This is togglable, as it may not render in every single terminal, and may lead to confusion.</dd>
-                    <dd><img src="{{ url_for('static', filename='panicface.png') }}" alt="A picture of the sad face appearing when the OS panics or faults."></dd>
+                    <dd><img src="assets/panicface.png" alt="A picture of the sad face appearing when the OS panics or faults."></dd>
 
                     <dt><span id="mauve"></span> status-faces</dt>
                     <dd><span id="peach"></span> When something is logged, it is shown as one of following by default: <span id="blue">(o_o) [INFO ]:</span> info, <span id="yellow">(0_0) [WARN ]:</span> warning, <span id="red">(X_X) [ERROR]:</span> error, or <span id="mauve">(-_-) [TODO ]:</span> todo. You can disable the emoticons by disabling this feature.</dd>
