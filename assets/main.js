@@ -22,7 +22,7 @@ footer.appendChild(footertext);
 document.body.appendChild(footer);
 
 function gohome() {
-    document.location.href = "/"
+    document.location.href = "/lemoncake"
 }
 
 function copied(tag) {
