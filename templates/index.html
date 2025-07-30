@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="darkreader-lock">
+    <script src="{{ url_for('static', filename='main.js') }}" defer></script>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <title>Lemoncake</title>
+</head>
+<body>
+    <div id="top">
+        <img src="{{ url_for('static', filename='logo.png') }}" id="lcklogo" onclick="gohome();">
+        <p id="lcktext" onclick="gohome();">Lemoncake</p>
+    </div>
+
+    <div id="maincontent">
+        <div id="about">
+            <h1><a id="linkabout" class="link" onclick="copied('about');"></a> About</h1>
+            <p>
+                Lemoncake is an OS written in Rust, and was created by <a href="https://github.com/SniverDaBest">SniverDaBest</a>.
+                <br>
+                It was originally called <a href="https://github.com/SniverDaBest/lemonade">Lemonade</a>, but because of changes in the Rust programming language, I had to restart the entire project.
+                <br>
+                The OS uses a monolitic kernel design. It tries to have things like drivers, and filesystem management done in the kernel.
+                <br>
+                It's licensed under the BSD 2-clause license, to let anyone possibly fork, and contribute. Maybe even make their own OS based off of this one!
+            </p>
+        </div>
+        <div id="help">
+            <h1><a id="linkhelp" class="link" onclick="copied('help');"></a> Help</h1>
+            <h2><a id="linkrunning" class="link" onclick="copied('linkrunning');"></a> Running the VM</h2>
+            <p>
+                If you're having trouble running Lemoncake in a VM (or don't know how to) then follow these steps.
+                <dl>
+                    <dt><span id="mauve"></span> Install Rust</dt>
+                    <dd><span id="peach"></span> You can do so by going to the <a href="https://www.rust-lang.org/tools/install">official website's download page</a> and following the instructions for your specific operating system.</dd>
+                    <dd><span id="peach"></span> <span id="blue">IMPORTANT</span>: If you're on Linux, do <b id="red">NOT</b> use your distro's package manager to install Rust. It will most likely not work!</dd>
+
+                    <dt><span id="mauve"></span> Clone the GitHub repository</dt>
+                    <dd><span id="peach"></span> Run <code lang="shell">git clone https://github.com/SniverDaBest/lemoncake && cd lemoncake</code> in your commandline.</dd>
+                    <dd><span id="peach"></span> <span id="teal">TIP</span>: If you don't want to install git, you can <a href="https://github.com/SniverDaBest/lemoncake/archive/refs/heads/main.zip">download it from GitHub's website</a>.</dd>
+
+                    <dt><span id="mauve"></span> Run the utility script</dt>
+                    <dd><span id="peach"></span> Type in (or copy and paste) to your terminal <code lang="shell">python3 utils.py</code></dd>
+                    <dd><span id="peach"></span> If you don't have Python installed, you will need to install it. Linux users should already have it installed, and Windows users can install it from the <a href="https://www.python.org/downloads/release/python-3135/">official website</a>.</dd>
+
+                    <dt><span id="mauve"></span> Compile and/or Run the OS with Qemu</dt>
+                    <dd><span id="peach"></span> To compile the OS and run it with Qemu, you can type in <code lang="shell">cargo run</code>. However, if you just want to compile the disk image, you can run <code lang="shell">cargo build</code>.</dd>
+                    <dd><span id="peach"></span> <span id="teal">TIP</span>: The built image is copied to <code>target/uefi.img</code></dd>
+                </dl>
+            </p>
+            <h3><a id="linkbios" class="link" onclick="copied('linkbios')"></a> Compiling for BIOS</h3>
+            <p>
+                <b id="yellow">WARNING</b>: Using the BIOS version of Lemoncake may not work correctly. UEFI support is more important to focus on, since BIOS is legacy, and very few modern computers don't have UEFI.
+                <br>
+                <br>
+                Follow instructions 1-3 of the <a href="#linkrunning">Running the VM</a> section. Once you complete them, open the src/main.rs file with a text editor. <i id="o2">(<span id="teal">TIP</span>: This is not to be confused with kernel/src/main.rs)</i>
+                <br>
+                Then, modify line 7 from <code lang="rust"><span id="mauve">let</span> uefi <span id="teal">=</span> <span id="peach">true</span><span id="o2">;</span></code> to <code lang="rust"><span id="mauve">let</span> uefi <span id="teal">=</span> <span id="peach">false</span><span id="o2">;</span></code>
+                <br>
+                Now, complete step four of the <a href="#linkrunning">Running the VM</a> section. You have now ran Lemoncake as BIOS.
+            </p>
+            <h2><a id="linkfeats" class="link" onclick="copied('linkfeats')"></a> Optional Features</h2>
+            <p>
+                As of 6/21/25, Lemoncake has two optional features <i>(both enabled by default)</i>.
+                <dl>
+                    <dt><span id="mauve"></span> serial-faces</dt>
+                    <dd><span id="peach"></span> When the system panics or faults, a sad face will appear through the serial terminal. This is togglable, as it may not render in every single terminal, and may lead to confusion.</dd>
+                    <dd><img src="{{ url_for('static', filename='panicface.png') }}" alt="A picture of the sad face appearing when the OS panics or faults."></dd>
+
+                    <dt><span id="mauve"></span> status-faces</dt>
+                    <dd><span id="peach"></span> When something is logged, it is shown as one of following by default: <span id="blue">(o_o) [INFO ]:</span> info, <span id="yellow">(0_0) [WARN ]:</span> warning, <span id="red">(X_X) [ERROR]:</span> error, or <span id="mauve">(-_-) [TODO ]:</span> todo. You can disable the emoticons by disabling this feature.</dd>
+                </dl>
+            </p>
+        </div>
+    </div>
+</body>
+</html>

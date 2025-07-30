@@ -1,0 +1,149 @@
+@font-face {
+  font-family: 'JetBrainsMono NFM';
+  src: url('JetBrainsMono\ Nerd\ Font\ Mono.ttf') format('truetype');
+  font-weight: normal;
+  font-style: normal;
+}
+
+html, body {
+    background-color: #1e1e2e;
+    margin: 0;
+}
+
+body {
+    min-height: 100vh;
+    display: flex;
+    flex-direction: column;
+}
+
+
+footer {
+    background-color: #181825;
+    margin-top: auto;
+}
+
+h1, h2, h3, h4, p, a, code, li, span, dt, dd {
+    color: #cdd6f4;
+    font-family: "JetBrainsMono NFM";
+}
+
+a {
+    color: #cba6f7;
+}
+
+code {
+    background-color: #181825;
+    border-radius: 5px;
+}
+
+#lcktext {
+    color: #f9e2af;
+    text-align: center;
+    font-size: 48pt;
+    font-weight: 700;
+    cursor: pointer;
+}
+
+#lcklogo {
+    width: 128px;
+    height: auto;
+    image-rendering: pixelated;
+    image-rendering: crisp-edges;
+    cursor: pointer;
+}
+
+#top {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    background-color: #181825;
+}
+
+#footertext {
+    font-size: 9pt;
+    text-align: center;
+    padding-top: 5px;
+    padding-bottom: 5px;
+    color: #a6adc8;
+}
+
+#textcontent {
+    text-align: center;
+}
+
+.link {
+    cursor: pointer;
+}
+
+#license {
+    text-align: center;
+}
+
+#maincontent {
+    margin: 5px;
+}
+
+#bigerror {
+    font-size: 48pt;
+    cursor: pointer;
+    text-align: center;
+}
+
+#bigerror2 {
+    font-size: 40pt;
+    cursor: pointer;
+    text-align: center;
+}
+
+.error {
+    color: #f38ba8;
+}
+
+.warning {
+    color: #f9e2af;
+}
+
+.info {
+    color: #89b4fa;
+}
+
+.todo {
+    color: #cba6f7;
+}
+
+.srsly {
+    color: #fab387;
+}
+
+.invis {
+    color: #1e1e2e;
+}
+
+#red {
+    color: #f38ba8;
+}
+
+#mauve {
+    color: #cba6f7;
+}
+
+#peach {
+    color: #fab387;
+}
+
+#yellow {
+    color: #f9e2af;
+}
+
+#teal {
+    color: #94e2d5;
+}
+
+#blue {
+    color: #89b4fa;
+}
+
+#o2 {
+    color: #9399b2;
+}
