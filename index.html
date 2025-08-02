@@ -27,6 +27,12 @@
                 It's licensed under the BSD 2-clause license, to let anyone possibly fork, and contribute. Maybe even make their own OS based off of this one!
             </p>
         </div>
+        <div id="contact">
+            <h1><a id="linkcontact" class="link" onclick="copied('contact');"></a> Contact</h1>
+            <p>
+                If you need to contact me, my email is 󰇮 <b id="mauve">sniverdabest@proton.me</b>, and my Discord is  <b id="mauve">sniverdabest</b>.
+            </p>
+        </div>
         <div id="help">
             <h1><a id="linkhelp" class="link" onclick="copied('help');"></a> Help</h1>
             <h2><a id="linkrunning" class="link" onclick="copied('linkrunning');"></a> Running the VM</h2>
@@ -63,7 +69,7 @@
             </p>
             <h2><a id="linkfeats" class="link" onclick="copied('linkfeats')"></a> Optional Features</h2>
             <p>
-                As of 8/2/25, Lemoncake has three optional features <i>(both enabled by default)</i>.
+                As of 8/2/25, Lemoncake has three optional features.
                 <dl>
                     <dt><span id="mauve"></span> serial-faces</dt>
                     <dd><span id="peach"></span> When the system panics or faults, a sad face will appear through the serial terminal. This is togglable, as it may not render in every single terminal, and may lead to confusion.</dd>
@@ -74,13 +80,14 @@
 
                     <dt><span id="mauve"></span> clear-on-scroll</dt>
                     <dd><span id="peach"></span> Instead of scrolling down when there is too much text on the screen to fit, it will clear the entire TTY.</dd>
+                    <dd><span id="peach"></span> <span id="blue">NOTE</span>: This feature is <b id="red">NOT</b> enabled by default!</dd>
                 </dl>
             </p>
             <h2><a id="linkbugs" class="link" onclick="copied('linkbugs')"></a> Known bugs</h2>
             <p>
                 <dl>
                     <dt><span id="mauve"></span> TTY won't clear on real hardware.</dt>
-                    <dd><span id="peach"></span> For some reason, when testing on real hardware, the TTY didn't seem to clear when scrolling, or with the clear-on-scroll feature enabled.</dd>
+                    <dd><span id="peach"></span> For some reason, when testing on real hardware, the TTY didn't seem to clear when scrolling, or with the clear-on-scroll feature enabled.</dd> 
                 </dl>
             </p>
         </div>
