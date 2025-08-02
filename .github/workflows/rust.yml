@@ -14,14 +14,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - name: Install NASM
+    - uses: actions/checkout@v4
+    - name: Build
       run: |
         sudo apt update
         sudo apt install -y nasm
-    - uses: actions/checkout@v4
-    - name: Run utility script
-      run: python utils.py
-    - uses: actions/checkout@v4
-    - name: Build
-      run: cargo build
-    
+        python utils.py
+        cargo build
