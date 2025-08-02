@@ -102,12 +102,6 @@ dir7/ata.csv
 dir8/cat.gif
 ```
 
-So hypothetically, a searching software could check the index when searching for `nyan_cat.gif`, and see both `dir1/cat.gif` and `dir8/cat.gif`, and check both of those places for `nyan_cat.gif`, instead of all 8+ directories. On a larger scale, this could possibly make major performance improvements for certain tasks, like searching the filesystem.
-
-The OS or user can decide whether to make the index size big, small, or not even use it at all. They can also change the filename length from 12 (recommended) to something like 24. In some scenarios, it doesn't make sense to waste space on something that they wouldn't use at any point in time. Maybe a user has a tiny drive, and doesn't want any FS bloat. However, it can boost performance in some tasks.
-
-But, it is **NOT** recommended to change the size of the index, since it would require a lot of manual work, and can corrupt your drive, cause loss of data, and many other horrible things that I highly doubt you want to happen.
-
 ## Why should I use SHFS instead of BTRFS, or Ext4?
 You shouldn't. ...yet. It's currently an **extremely** new filesystem, and hasn't been tested much, if at all. As previously stated, do **NOT** use this outside of a testing environment. e.g., your work computer, a server, or your external SSD with all your projects.
 

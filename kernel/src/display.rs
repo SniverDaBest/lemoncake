@@ -45,6 +45,22 @@ impl Framebuffer {
         }
     }
 
+    pub fn draw_rect(&mut self, x: usize, y: usize, w: usize, h: usize, color: (u8, u8, u8)) {
+        if x >= self.fb.info().width
+            || y >= self.fb.info().height
+            || x + w >= self.fb.info().width
+            || y + h >= self.fb.info().height
+        {
+            return;
+        }
+
+        for x in x..x + w {
+            for y in y..y + h {
+                self.put_pixel(x, y, color);
+            }
+        }
+    }
+
     pub fn draw_bitmap(
         &mut self,
         bitmap: &[(u8, u8, u8, u8)],
@@ -117,12 +133,27 @@ impl Framebuffer {
     }
 }
 
-static mut TTY_BUFFER: [char; 80 * 25] = ['\x00'; 80 * 25];
+#[derive(Clone, Copy)]
+pub struct Cell {
+    ch: char,
+    color: (u8, u8, u8, u8),
+}
+
+impl Cell {
+    pub fn empty(color: (u8, u8, u8, u8)) -> Self {
+        return Self { ch: '\x00', color };
+    }
+}
+
+static mut TTY_BUFFER: [Cell; 130 * 50] = [Cell {
+    ch: '\x00',
+    color: (255, 255, 255, 255),
+}; 130 * 50];
 
 pub struct TTY {
     width: usize,
     height: usize,
-    text_buf: &'static mut [char],
+    text_buf: &'static mut [Cell],
     cursor_x: usize,
     cursor_y: usize,
     fg_color: (u8, u8, u8, u8),
@@ -134,8 +165,8 @@ impl TTY {
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
             (width, height) = fb.resolution();
         }
-        let width = width / 8;
-        let height = height / 8;
+        let width = (width / 8).min(130);
+        let height = (height / 8).min(50);
 
         let buffer = unsafe { &mut TTY_BUFFER[..] };
 
@@ -153,6 +184,8 @@ impl TTY {
         if x >= self.width || y >= self.height {
             return;
         }
+
+        self.text_buf[y * self.width + x] = Cell { ch: c, color };
         crate::font::draw_char(x * 8, y * 8, c, color);
     }
 
@@ -160,15 +193,97 @@ impl TTY {
         if x >= self.width || y >= self.height {
             return None;
         }
-        return Some(self.text_buf[y * self.width + x]);
+        return Some(self.text_buf[y * self.width + x].ch);
     }
 
     pub fn clear_tty(&mut self) {
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-            fb.clear_screen((30, 30, 46));
+            fb.draw_rect(0, 0, self.width * 8, self.height * 8, (30, 30, 46));
         }
+
+        for i in 0..self.text_buf.len() {
+            self.text_buf[i] = Cell::empty(self.fg_color);
+        }
+
         self.cursor_x = 0;
         self.cursor_y = 0;
+    }
+
+    #[cfg(not(feature = "clear-on-scroll"))]
+    pub fn scroll_up(&mut self) {
+        for y in 1..self.height {
+            for x in 0..self.width {
+                let from = self.text_buf[y * self.width + x];
+                self.text_buf[(y - 1) * self.width + x] = from;
+            }
+        }
+
+        for x in 0..self.width {
+            self.text_buf[(self.height - 1) * self.width + x] = Cell {
+                ch: '\x00',
+                color: self.fg_color,
+            };
+        }
+
+        if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
+            fb.draw_rect(0, 0, self.width * 8, self.height * 8, (30, 30, 46));
+        }
+
+        for y in 0..self.height {
+            for x in 0..self.width {
+                let cell = self.text_buf[y * self.width + x];
+                if cell.ch != '\x00' {
+                    crate::font::draw_char(x * 8, y * 8, cell.ch, cell.color);
+                }
+            }
+        }
+    }
+
+    pub fn delete(&mut self, bksp: bool) {
+        if self.cursor_y >= self.height {
+            return;
+        }
+
+        let row_start = self.cursor_y * self.width;
+        let row_end = row_start + self.width;
+
+        if bksp {
+            if self.cursor_x == 0 {
+                return;
+            }
+            self.cursor_x -= 1;
+
+            for x in self.cursor_x..(self.width - 1) {
+                self.text_buf[row_start + x] = self.text_buf[row_start + x + 1];
+            }
+
+            self.text_buf[row_end - 1] = Cell {
+                ch: '\x00',
+                color: self.fg_color,
+            };
+        } else {
+            if self.cursor_x >= self.width {
+                return;
+            }
+
+            for x in self.cursor_x..(self.width - 1) {
+                self.text_buf[row_start + x] = self.text_buf[row_start + x + 1];
+            }
+
+            self.text_buf[row_end - 1] = Cell {
+                ch: '\x00',
+                color: self.fg_color,
+            };
+        }
+
+        if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
+            fb.draw_rect(0, self.cursor_y * 8, self.width * 8, 8, (30, 30, 46));
+        }
+
+        for x in 0..self.width {
+            let cell = self.text_buf[row_start + x];
+            crate::font::draw_char(x * 8, self.cursor_y * 8, cell.ch, cell.color);
+        }
     }
 
     pub fn write_str(&mut self, s: &str) {
@@ -217,9 +332,9 @@ impl TTY {
                     self.cursor_x = 0;
                     self.cursor_y += 1;
                 }
-                '\r' => {
-                    self.cursor_x = 0;
-                }
+                '\r' => self.cursor_x = 0,
+                '\x08' => self.delete(true),
+                '\x7f' => self.delete(false),
                 _ => {
                     self.set_char(self.cursor_x, self.cursor_y, c, self.fg_color);
                     self.cursor_x += 1;
@@ -230,7 +345,14 @@ impl TTY {
                 self.cursor_y += 1;
             }
             if self.cursor_y >= self.height {
-                self.clear_tty(); // TODO: scroll down
+                #[cfg(not(feature = "clear-on-scroll"))]
+                {
+                    self.scroll_up();
+                    self.cursor_y = self.height - 1;
+                }
+
+                #[cfg(feature = "clear-on-scroll")]
+                self.clear_tty();
             }
         }
     }

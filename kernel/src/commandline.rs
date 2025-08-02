@@ -174,6 +174,18 @@ fn panic_(_registry: &CommandRegistry, _args: Vec<&str>) -> i32 {
     panic!("Panic initiated from command line.");
 }
 
+fn res(_registry: &CommandRegistry, _args: Vec<&str>) -> i32 {
+    let sz = if let Some(fb) = crate::FRAMEBUFFER.lock().as_mut() {
+        (fb.fb.info().width, fb.fb.info().height)
+    } else {
+        println!("Unable to get the framebuffer!");
+        return 1;
+    };
+
+    println!("Current resolution: {}x{}", sz.0, sz.1);
+    return 0;
+}
+
 fn init_command_registry() -> CommandRegistry {
     let license_cmd = Command::new(
         "license",
@@ -214,6 +226,12 @@ fn init_command_registry() -> CommandRegistry {
         "Displays this message.",
         help,
     );
+    let res_cmd = Command::new(
+        "res",
+        vec!["resolution"],
+        "Displays the current resolution.",
+        res,
+    );
 
     let mut reg = CommandRegistry::new();
     reg.push(license_cmd);
@@ -224,6 +242,7 @@ fn init_command_registry() -> CommandRegistry {
     reg.push(whoami_cmd);
     reg.push(panic_cmd);
     reg.push(shutdown_cmd);
+    reg.push(res_cmd);
     reg.push(help_cmd);
 
     return reg;
@@ -254,8 +273,9 @@ pub async fn run_command_line(scancodes: Arc<Mutex<ScancodeStream>>) {
                 if let Some(key) = keyboard.process_keyevent(key_event) {
                     match key {
                         DecodedKey::Unicode(character) => match character {
-                            '\u{7f}' => {
+                            '\x08' => {
                                 input_buffer.pop();
+                                print!("\x08");
                             }
                             '\n' => {
                                 println!();
@@ -282,7 +302,7 @@ fn process_command(buf: &String, prev_ret_code: i32) -> i32 {
     }
 
     if COMMAND_REGISTRY.lock().is_none() {
-        error!("Command registry is uninitialized!");
+        error!("(CMDLINE) Command registry is uninitialized!");
         return -2;
     }
 
@@ -299,7 +319,7 @@ fn process_command(buf: &String, prev_ret_code: i32) -> i32 {
             return x.unwrap();
         }
     } else {
-        error!("Unable to lock and take access of the command registry!");
+        error!("(CMDLINE) Unable to lock and take access of the command registry!");
         return -3;
     }
 }

@@ -4,8 +4,11 @@
 #![allow(unsafe_op_in_unsafe_fn, internal_features, clippy::needless_return)]
 
 /* TODO:
+ * Display drivers
+ * NVMe (maybe other storage devs)
  * Scroll down when TTY cursor y pos >= TTY height
  * Shutting down the system through ACPI
+ * A better bootloader (Limine)
  * Working usermode
  * A C/C++ library (like glibc or musl)
  * Support external drivers
@@ -49,6 +52,9 @@ use x86_64::registers::control::{Efer, EferFlags};
 use x86_64::registers::model_specific::Msr;
 use x86_64::structures::paging::{FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB};
 use x86_64::{PhysAddr, VirtAddr};
+
+use crate::elf::load_elf;
+use crate::syscall::{init_syscalls, switch_to_user, verify_syscall_msr};
 
 pub static BOOTLOADER_CONFIG: BootloaderConfig = {
     let mut config = BootloaderConfig::new_default();
@@ -160,40 +166,14 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     info!("Initializing scancode queue...");
     let scancodes = Arc::new(Mutex::new(ScancodeStream::new()));
 
-    /*info!("Looking for AHCI devices...");
-    let devices = disks::ahci::scan_for_ahci_controllers();
-    let mut ahci_devs: Vec<AHCIController> = Vec::new();
-
-    for dev in devices {
-        info!("PCI Device:\n{:#?}", dev);
-        let c = unsafe { AHCIController::from_pci(dev, &mut mapper, &mut frame_allocator) };
-        if c.is_some() {
-            ahci_devs.push(c.unwrap());
-        }
-    }
-
-    info!("Found {} AHCI devices in total.", ahci_devs.len());
-
-    info!("Scanning for SFS filesystems...");
-    for dev in ahci_devs.iter_mut() {
-        info!("Ports: {:?}", dev.ports);
-        if let Some(mut sfs) = fs::sfs::SFS::probe_on_device(dev) {
-            match sfs.mount() {
-                Ok(_) => {
-                    info!("Mounted SFS filesystem on device!");
-                }
-                Err(e) => {
-                    error!("Failed to mount SFS! Error: {:?}", e);
-                }
-            }
-        } else {
-            info!("No SFS filesystem found on device");
-        }
+    info!("Checking for NVME devices...");
+    unsafe {
+        disks::nvme::nvme_init(&mut mapper, &mut frame_allocator);
     }
 
     info!("Setting up syscalls...");
     unsafe {
-        syscall::init_syscalls();
+        init_syscalls();
     }
 
     info!("Loading init program...");
@@ -207,14 +187,14 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     info!("Mapping the user stack...");
     map_user_stack(&mut mapper, &mut frame_allocator);
 
+    info!("Validating syscall MSRs...");
+    unsafe {
+        verify_syscall_msr();
+    }
+
     info!("Switching to usermode at {:#x}...", e);
     unsafe {
-        switch_to_user(e.as_u64(), 0x7FFF_FFFF_F000);
-    }*/
-
-    info!("Checking for NVME devices...");
-    unsafe {
-        disks::nvme::nvme_init(&mut mapper, &mut frame_allocator);
+        switch_to_user(e.as_u64(), 0x7FFF_FFFF_E000);
     }
 
     let mut e = Executor::new();
@@ -226,7 +206,7 @@ pub fn map_user_stack(
     mapper: &mut impl Mapper<Size4KiB>,
     frame_allocator: &mut impl FrameAllocator<Size4KiB>,
 ) {
-    let user_stack_start = VirtAddr::new(0x7FFF_FFFF_D000);
+    let user_stack_start = VirtAddr::new(0x7FFF_FFF0_0000);
     let user_stack_end = VirtAddr::new(0x7FFF_FFFF_E000);
 
     info!("User stack range:");
@@ -255,15 +235,6 @@ pub fn map_user_stack(
                 .flush();
         }
     }
-}
-
-pub unsafe fn switch_to_user(entry: u64, user_stack_top: u64) {
-    Efer::update(|e| *e |= EferFlags::SYSTEM_CALL_EXTENSIONS);
-    let star = ((0x1Bu64) << 48) | ((0x08u64) << 32);
-    Msr::new(0xC000_0081).write(star);
-    Msr::new(0xC000_0082).write(entry);
-    Msr::new(0xC000_0084).write(0x0000_0000_0000_0001);
-    syscall::jump_to_usermode(entry, user_stack_top);
 }
 
 pub fn hlt_loop() -> ! {

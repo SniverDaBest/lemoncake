@@ -9,6 +9,8 @@ use x86_64::{
     },
 };
 
+use crate::info;
+
 pub mod bump;
 pub mod fixed_size_block;
 pub mod linked_list;
@@ -97,12 +99,14 @@ pub fn alloc_pages(
 
     for i in 0..num_pages {
         let virt = VirtAddr::new(base + (i as u64) * 4096);
-        let phys = frame_allocator.allocate_frame()?;
+        let phys = frame_allocator
+            .allocate_frame()
+            .expect("(ALLOCATOR) Unable to allocate a frame!");
         let flags = PageTableFlags::PRESENT | PageTableFlags::WRITABLE;
         unsafe {
             mapper
                 .map_to(Page::containing_address(virt), phys, flags, frame_allocator)
-                .ok()?
+                .expect("(ALLOCATOR) Unable to map a page!")
                 .flush();
         }
     }
@@ -140,8 +144,7 @@ pub fn alloc(
         return None;
     }
 
-    let page_count = (num_bytes + 4095) / 4096;
-    return alloc_pages(mapper, frame_allocator, page_count);
+    return alloc_pages(mapper, frame_allocator, ((num_bytes + 4095) / 4096).max(2));
 }
 
 pub fn free(

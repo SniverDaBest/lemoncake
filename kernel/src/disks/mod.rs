@@ -1,4 +1,4 @@
-pub mod ahci;
+//pub mod ahci;
 pub mod nvme;
 
 const SATA_SIG_ATA: u32 = 0x00000101;

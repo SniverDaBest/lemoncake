@@ -1,4 +1,4 @@
-# TODO: make sure this works on BSD
+# TODO: Make FreeBSD stuff
 
 import platform
 import os

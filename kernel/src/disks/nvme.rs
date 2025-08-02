@@ -2,10 +2,9 @@ use super::*;
 use crate::{
     allocator::{alloc, alloc_pages, free, map_page, unmap_page},
     error, info, nftodo,
-    pci::{PCIDevice, read_bar, read_pci_config, scan_pci_bus, write_pci, write_pci_config},
+    pci::{PCIDevice, scan_pci_bus},
     sleep::Sleep,
 };
-use alloc::vec::Vec;
 use core::{
     mem::zeroed,
     ptr::{self, copy_nonoverlapping, read_volatile, write_bytes, write_volatile},
@@ -252,22 +251,42 @@ pub fn is_nvme(dev: &PCIDevice) -> bool {
 pub unsafe fn nvme_init(
     mapper: &mut impl Mapper<Size4KiB>,
     frame_allocator: &mut impl FrameAllocator<Size4KiB>,
-) {
+) -> usize {
+    let mut avail = 0;
     for (i, device) in scan_pci_bus().iter().enumerate() {
         if is_nvme(device) {
             info!("(NVME) Found NVMe device on device no. {}!", i);
-            probe_controller(device, mapper, frame_allocator)
-                .expect("(NVME) Unable to probe the controller!");
+            match probe_controller(device, mapper, frame_allocator) {
+                Ok(_) => avail += 1,
+                Err(e) => error!("(NVME) Unable to probe controller! Error: {:?}", e),
+            };
         }
     }
+    return avail;
+}
+
+fn check_bar_sz(sz: u64) -> Result<u64, ProbeError> {
+    if sz == 0 { return Err(ProbeError::Bar0SizeZero); }
+    if sz & (sz - 1) != 0 {
+        return Err(ProbeError::InvalidBar0Size);
+    }
+    if sz < 0x1000 { return Ok(0x1000); }
+    if sz > (1 << 48) { return Err(ProbeError::InvalidBar0Size); }
+    return Ok(sz);
 }
 
 unsafe fn probe_controller(
     dev: &PCIDevice,
     mapper: &mut impl Mapper<Size4KiB>,
     frame_allocator: &mut impl FrameAllocator<Size4KiB>,
-) -> Result<NVMeController, ProbeError> {
-    let bar0 = read_bar(dev, 0).expect("(NVME) Unable to read bar0 for PCI device!");
+) -> Result<(), ProbeError> {
+    let vaddr = alloc(mapper, frame_allocator, size_of::<NVMeController>())
+        .expect("(NVME) Unable to allocate memory for an NVMe controller!");
+    write_bytes(vaddr.as_mut_ptr::<u8>(), 0, size_of::<NVMeController>());
+    let controller = &mut *(vaddr.as_mut_ptr::<u8>() as *mut NVMeController);
+    controller.pci_dev = *dev;
+
+    let bar0 = dev.read_bar(0).expect("(NVME) Unable to read bar0 for PCI device!");
 
     if bar0 & 0x1 != 0 {
         error!("(NVME) bar0 isn't mapped!");
@@ -276,25 +295,22 @@ unsafe fn probe_controller(
 
     let phys_addr = (bar0 & 0xFFFFFFF0) as u64;
 
-    let origin = read_bar(dev, 0).unwrap();
-    write_pci(0x10, dev, 0xFFFFFFFF);
-    let sz_mask = read_bar(dev, 0).unwrap() & 0xFFFFFFF0;
-    write_pci(0x10, dev, origin);
+    let origin = dev.read_bar(0).unwrap();
+    dev.write_pci(0x10, 0xFFFFFFFF);
+    let sz_mask = (dev.read_bar(0).unwrap() & 0xFFFFFFF0) as u64;
+    dev.write_pci(0x10, origin);
     if sz_mask == 0 {
         error!("(NVME) bar0 size is zero!");
         return Err(ProbeError::Bar0SizeZero);
     }
 
-    let bar_sz = !(sz_mask as usize) + 1;
-    if bar_sz < 0x1000 {
-        error!("(NVME) Invalid bar0 size!");
-        return Err(ProbeError::Bar0SizeZero);
-    }
+    let bar_sz = check_bar_sz((!sz_mask).wrapping_add(1))?;
 
     let range = Page::range_inclusive(
         Page::containing_address(VirtAddr::new(phys_addr + crate::PMO)),
-        Page::containing_address(VirtAddr::new(phys_addr + bar_sz as u64 + crate::PMO)),
+        Page::containing_address(VirtAddr::new(phys_addr + crate::PMO + bar_sz as u64)),
     );
+
     for page in range {
         let frame = frame_allocator
             .allocate_frame()
@@ -310,13 +326,7 @@ unsafe fn probe_controller(
             .flush();
     }
 
-    write_pci_config(
-        dev.bus,
-        dev.slot,
-        dev.func,
-        0x04,
-        read_pci_config(dev.bus, dev.slot, dev.func, 0x04) | 0x06,
-    );
+    dev.write_pci_config(0x04, dev.read_pci_config(0x04) | 0x06);
 
     return Err(ProbeError::UnmappedBar0);
 }

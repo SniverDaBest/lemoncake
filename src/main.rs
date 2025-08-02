@@ -4,23 +4,22 @@ fn main() {
 
     println!("UEFI Path: {}\nBIOS Path: {}", up, bp);
 
-    let uefi = true;
+    let uefi = false;
 
-    #[cfg(target_os = "linux")]
+    #[cfg(not(target_os = "windows"))]
     let mut copy = std::process::Command::new("cp");
-    #[cfg(target_os = "linux")]
-    if uefi {
-        copy.arg(up).arg("./target/uefi.img");
-    } else {
-        copy.arg(bp).arg("./target/bios.img");
-    }
-
     #[cfg(target_os = "windows")]
     let mut copy = std::process::Command::new("copy");
-    #[cfg(target_os = "windows")]
+
     if uefi {
+        #[cfg(not(target_os = "windows"))]
+        copy.arg(up).arg("./target/uefi.img");
+        #[cfg(target_os = "windows")]
         copy.arg(up).arg(".\\target\\uefi.img");
     } else {
+        #[cfg(not(target_os = "windows"))]
+        copy.arg(bp).arg("./target/bios.img");
+        #[cfg(target_os = "windows")]
         copy.arg(bp).arg(".\\target\\bios.img");
     }
 
@@ -45,7 +44,8 @@ fn main() {
         .arg("id=disk,file=hd.img,if=none,format=raw");
     cmd.arg("-device").arg("nvme,drive=disk,serial=deadbabe");
     cmd.arg("-machine").arg("q35");
-    cmd.arg("-vga").arg("virtio");
+    cmd.arg("-device").arg("vmware-svga");
+    cmd.arg("-cpu").arg("host");
 
     let mut child = cmd.spawn().unwrap();
     child.wait().unwrap();

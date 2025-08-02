@@ -3,7 +3,7 @@ use alloc::vec::*;
 use core::{arch::asm, fmt};
 
 /// The PCI Device type.
-#[derive(Debug)]
+#[derive(Debug, Copy, Clone)]
 pub struct PCIDevice {
     pub vendor_id: u32,
     pub device_id: u32,
@@ -36,10 +36,82 @@ impl PCIDevice {
         };
     }
 
+    pub unsafe fn write_pci(&self, offset: u8, value: u32) {
+        let address = (1 << 31)
+            | ((self.bus as u32) << 16)
+            | ((self.slot as u32) << 11)
+            | ((self.func as u32) << 8)
+            | ((offset as u32) & 0xFC);
+
+        unsafe {
+            asm!("out dx, eax", in("dx") 0xCF8, in("eax") address);
+            asm!("out dx, eax", in("dx") 0xCFC, in("eax") value);
+        }
+    }
+
+    pub unsafe fn read_pci(&self, offset: u8) -> u32 {
+        let address = (1 << 31)
+            | ((self.bus as u32) << 16)
+            | ((self.slot as u32) << 11)
+            | ((self.func as u32) << 8)
+            | ((offset as u32) & 0xFC);
+
+        unsafe {
+            asm!("out dx, eax", in("dx") 0xCF8, in("eax") address);
+            let mut data: u32;
+            asm!("in eax, dx", in("dx") 0xCFC, out("eax") data);
+            return data;
+        }
+    }
+
+    pub unsafe fn read_bar(&self, bar: u32) -> Option<u32> {
+        if bar > 5 {
+            error!("(PCI) Bar no. {} is greater than 5!", bar);
+            return None;
+        } else {
+            return Some(self.read_pci_config((0x10 + bar * 4) as u8));
+        }
+    }
+
+    pub unsafe fn read_pci_config(&self, offset: u8) -> u32 {
+        let addr = (1 << 31)
+            | ((self.bus as u32) << 16)
+            | ((self.slot as u32) << 11)
+            | ((self.func as u32) << 8)
+            | ((offset as u32) & 0xFC);
+        asm!("out dx, eax", in("dx") 0xCF8, in("eax") addr);
+        let mut value: u32;
+        asm!("in eax, dx", out("eax") value, in("dx") 0xCFC);
+        return value;
+    }
+
+    pub unsafe fn write_pci_config(&self, offset: u8, value: u32) {
+        let address = (1 << 31)
+            | ((self.bus as u32) << 16)
+            | ((self.slot as u32) << 11)
+            | ((self.func as u32) << 8)
+            | ((offset as u32) & 0xFC);
+        asm!("out dx, eax", in("dx") 0xCF8, in("eax") address);
+        asm!("out dx, eax", in("dx") 0xCFC, in("eax") value);
+    }
+
+    pub fn from_bsf(bus: u8, slot: u8, func: u8) -> Option<Self> {
+        let dummy = Self::new(0, 0, 0, 0, bus, slot, func);
+        let vendor_id = unsafe { Self::read_pci_config(&dummy, 0x00) } & 0xFFFF;
+        if vendor_id == 0xFFFF {
+            return None;
+        }
+        let device_id = unsafe { Self::read_pci_config(&dummy, 0x00) >> 16 };
+        let class_code = unsafe { Self::read_pci_config(&dummy, 0x08) >> 24 };
+        let subclass = (unsafe { Self::read_pci_config(&dummy, 0x08) } >> 16) & 0xFF;
+
+        return Some(Self::new(
+            vendor_id, device_id, class_code, subclass, bus, slot, func,
+        ));
+    }
+
     pub fn prog_if(&self) -> u8 {
-        return unsafe {
-            ((read_pci_config(self.bus, self.slot, self.func, 0x08) >> 8) & 0xFF) as u8
-        };
+        return unsafe { (( self.read_pci_config(0x08) >> 8) & 0xFF) as u8 };
     }
 }
 
@@ -59,87 +131,15 @@ impl fmt::Display for PCIDevice {
     }
 }
 
-/// Writes to a certain PCI device, at a certain offset.
-pub unsafe fn write_pci(offset: u8, pci_device: &PCIDevice, value: u32) {
-    let address = (1 << 31)
-        | ((pci_device.bus as u32) << 16)
-        | ((pci_device.slot as u32) << 11)
-        | ((pci_device.func as u32) << 8)
-        | ((offset as u32) & 0xFC);
-
-    unsafe {
-        asm!("out dx, eax", in("dx") 0xCF8, in("eax") address);
-        asm!("out dx, eax", in("dx") 0xCFC, in("eax") value);
-    }
-}
-
-pub unsafe fn read_pci(offset: u8, pci_device: &PCIDevice) -> u32 {
-    let address = (1 << 31)
-        | ((pci_device.bus as u32) << 16)
-        | ((pci_device.slot as u32) << 11)
-        | ((pci_device.func as u32) << 8)
-        | ((offset as u32) & 0xFC);
-
-    unsafe {
-        asm!("out dx, eax", in("dx") 0xCF8, in("eax") address);
-        let mut data: u32;
-        asm!("in eax, dx", in("dx") 0xCFC, out("eax") data);
-        return data;
-    }
-}
-
-pub unsafe fn read_bar(pci_device: &PCIDevice, bar: u32) -> Option<u32> {
-    if bar > 5 {
-        error!("(PCI) Bar no. {} is greater than 5!", bar);
-        return None;
-    } else {
-        return Some(read_pci_config(
-            pci_device.bus,
-            pci_device.slot,
-            pci_device.func,
-            (0x10 + bar * 4) as u8,
-        ));
-    }
-}
-
-pub unsafe fn read_pci_config(bus: u8, slot: u8, func: u8, offset: u8) -> u32 {
-    let addr = (1 << 31)
-        | ((bus as u32) << 16)
-        | ((slot as u32) << 11)
-        | ((func as u32) << 8)
-        | ((offset as u32) & 0xFC);
-    asm!("out dx, eax", in("dx") 0xCF8, in("eax") addr);
-    let mut value: u32;
-    asm!("in eax, dx", out("eax") value, in("dx") 0xCFC);
-    return value;
-}
-
-pub unsafe fn write_pci_config(bus: u8, slot: u8, func: u8, offset: u8, value: u32) {
-    let address = (1 << 31)
-        | ((bus as u32) << 16)
-        | ((slot as u32) << 11)
-        | ((func as u32) << 8)
-        | ((offset as u32) & 0xFC);
-    asm!("out dx, eax", in("dx") 0xCF8, in("eax") address);
-    asm!("out dx, eax", in("dx") 0xCFC, in("eax") value);
-}
-
 pub fn scan_pci_bus() -> Vec<PCIDevice> {
     let mut devices = Vec::new();
     for bus in 0..255 {
         for slot in 0..32 {
             for func in 0..8 {
-                let vendor_id = unsafe { read_pci_config(bus, slot, func, 0x00) } & 0xFFFF;
-                if vendor_id == 0xFFFF {
-                    continue;
+                let d = PCIDevice::from_bsf(bus, slot, func);
+                if d.is_some() {
+                    devices.push(d.unwrap());
                 }
-                let device_id = unsafe { read_pci_config(bus, slot, func, 0x00) >> 16 };
-                let class_code = unsafe { read_pci_config(bus, slot, func, 0x08) >> 24 };
-                let subclass = (unsafe { read_pci_config(bus, slot, func, 0x08) } >> 16) & 0xFF;
-
-                devices.push(PCIDevice::new(
-                    vendor_id, device_id, class_code, subclass, bus, slot, func,
-                ));
             }
         }
     }

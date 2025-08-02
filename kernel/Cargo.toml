@@ -57,3 +57,4 @@ default-features = false
 default = ["serial-faces", "status-faces"]
 serial-faces = []
 status-faces = []
+clear-on-scroll = []

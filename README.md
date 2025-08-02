@@ -20,6 +20,7 @@ The only dependencies you'll need are:
 - Cargo
 - Qemu
 - Python
+- mkfs.fat (dosfstools, i think?)
 <!-- END OF LIST><!-->
 
 # Running it yourself
