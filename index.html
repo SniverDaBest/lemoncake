@@ -63,7 +63,7 @@
             </p>
             <h2><a id="linkfeats" class="link" onclick="copied('linkfeats')"></a> Optional Features</h2>
             <p>
-                As of 6/21/25, Lemoncake has two optional features <i>(both enabled by default)</i>.
+                As of 8/2/25, Lemoncake has three optional features <i>(both enabled by default)</i>.
                 <dl>
                     <dt><span id="mauve"></span> serial-faces</dt>
                     <dd><span id="peach"></span> When the system panics or faults, a sad face will appear through the serial terminal. This is togglable, as it may not render in every single terminal, and may lead to confusion.</dd>
@@ -71,6 +71,16 @@
 
                     <dt><span id="mauve"></span> status-faces</dt>
                     <dd><span id="peach"></span> When something is logged, it is shown as one of following by default: <span id="blue">(o_o) [INFO ]:</span> info, <span id="yellow">(0_0) [WARN ]:</span> warning, <span id="red">(X_X) [ERROR]:</span> error, or <span id="mauve">(-_-) [TODO ]:</span> todo. You can disable the emoticons by disabling this feature.</dd>
+
+                    <dt><span id="mauve"></span> clear-on-scroll</dt>
+                    <dd><span id="peach"></span> Instead of scrolling down when there is too much text on the screen to fit, it will clear the entire TTY.</dd>
+                </dl>
+            </p>
+            <h2><a id="linkbugs" class="link" onclick="copied('linkbugs')"></a> Known bugs</h2>
+            <p>
+                <dl>
+                    <dt><span id="mauve"></span> TTY won't clear on real hardware.</dt>
+                    <dd><span id="peach"></span> For some reason, when testing on real hardware, the TTY didn't seem to clear when scrolling, or with the clear-on-scroll feature enabled.</dd>
                 </dl>
             </p>
         </div>
