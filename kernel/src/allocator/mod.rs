@@ -9,8 +9,6 @@ use x86_64::{
     },
 };
 
-use crate::info;
-
 pub mod bump;
 pub mod fixed_size_block;
 pub mod linked_list;

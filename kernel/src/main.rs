@@ -9,9 +9,10 @@
  * Scroll down when TTY cursor y pos >= TTY height
  * Shutting down the system through ACPI
  * A better bootloader (Limine)
- * Working usermode
+ * ~~Working~~ usermode
  * A C/C++ library (like glibc or musl)
  * Support external drivers
+ * Different fonts
  */
 
 extern crate alloc;
@@ -43,18 +44,18 @@ use commandline::run_command_line;
 use core::error;
 use core::fmt::{Arguments, Write};
 use display::{Framebuffer, TTY};
+use elf::load_elf;
 use executor::{Executor, Task};
 use keyboard::ScancodeStream;
 use memory::BootInfoFrameAllocator;
 use spin::Mutex;
 use spinning_top::Spinlock;
-use x86_64::registers::control::{Efer, EferFlags};
-use x86_64::registers::model_specific::Msr;
-use x86_64::structures::paging::{FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB};
-use x86_64::{PhysAddr, VirtAddr};
+use x86_64::{
+    PhysAddr, VirtAddr,
+    structures::paging::{FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB},
+};
 
-use crate::elf::load_elf;
-use crate::syscall::{init_syscalls, switch_to_user, verify_syscall_msr};
+use crate::syscall::jump_to_usermode;
 
 pub static BOOTLOADER_CONFIG: BootloaderConfig = {
     let mut config = BootloaderConfig::new_default();
@@ -109,7 +110,16 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     allocator::init_heap(&mut mapper, &mut frame_allocator).expect("Unable to initialize heap!");
 
     info!("Displaying logo...");
-    png::draw_png(include_bytes!("../../assets/logo.png"), 1206, 0);
+    let w = if let Some(fb) = crate::FRAMEBUFFER.lock().as_mut() {
+        Some(fb.fb.info().width)
+    } else {
+        None
+    };
+    png::draw_png(
+        include_bytes!("../../assets/logo.png"),
+        w.expect("Couldn't get width!") - 64,
+        0,
+    );
 
     info!("Getting ACPI information...");
     let tables = unsafe {
@@ -171,11 +181,6 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
         disks::nvme::nvme_init(&mut mapper, &mut frame_allocator);
     }
 
-    info!("Setting up syscalls...");
-    unsafe {
-        init_syscalls();
-    }
-
     info!("Loading init program...");
     let e = load_elf(
         include_bytes!("../../init"),
@@ -187,14 +192,9 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     info!("Mapping the user stack...");
     map_user_stack(&mut mapper, &mut frame_allocator);
 
-    info!("Validating syscall MSRs...");
-    unsafe {
-        verify_syscall_msr();
-    }
-
     info!("Switching to usermode at {:#x}...", e);
     unsafe {
-        switch_to_user(e.as_u64(), 0x7FFF_FFFF_E000);
+        jump_to_usermode(e.as_u64(), 0x7FFF_FFFF_E000);
     }
 
     let mut e = Executor::new();

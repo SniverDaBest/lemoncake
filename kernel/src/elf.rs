@@ -5,7 +5,7 @@ use x86_64::{
     structures::paging::{FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB},
 };
 
-const USER_BASE: u64 = 0x0000_6000_0000; 
+const USER_BASE: u64 = 0x0000_6000_0000;
 
 pub fn load_elf(
     bytes: &[u8],
@@ -46,7 +46,12 @@ pub fn load_elf(
 
             unsafe {
                 mapper
-                    .map_to(page, frame, flags | PageTableFlags::WRITABLE, frame_allocator)
+                    .map_to(
+                        page,
+                        frame,
+                        flags | PageTableFlags::WRITABLE,
+                        frame_allocator,
+                    )
                     .expect("(ELF) Unable to map page")
                     .flush();
             }
@@ -57,9 +62,7 @@ pub fn load_elf(
             let page_offset = page.start_address().as_u64() as usize - seg_start as usize;
 
             let file_start = phdr.p_offset as usize + page_offset;
-            let file_end = (file_start + 4096).min(
-                phdr.p_offset as usize + phdr.p_filesz as usize
-            );
+            let file_end = (file_start + 4096).min(phdr.p_offset as usize + phdr.p_filesz as usize);
 
             if file_start < file_end && file_start < bytes.len() {
                 let copy_len = file_end - file_start;

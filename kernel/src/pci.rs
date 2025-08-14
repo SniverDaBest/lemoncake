@@ -111,7 +111,7 @@ impl PCIDevice {
     }
 
     pub fn prog_if(&self) -> u8 {
-        return unsafe { (( self.read_pci_config(0x08) >> 8) & 0xFF) as u8 };
+        return unsafe { ((self.read_pci_config(0x08) >> 8) & 0xFF) as u8 };
     }
 }
 

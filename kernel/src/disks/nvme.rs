@@ -266,12 +266,18 @@ pub unsafe fn nvme_init(
 }
 
 fn check_bar_sz(sz: u64) -> Result<u64, ProbeError> {
-    if sz == 0 { return Err(ProbeError::Bar0SizeZero); }
+    if sz == 0 {
+        return Err(ProbeError::Bar0SizeZero);
+    }
     if sz & (sz - 1) != 0 {
         return Err(ProbeError::InvalidBar0Size);
     }
-    if sz < 0x1000 { return Ok(0x1000); }
-    if sz > (1 << 48) { return Err(ProbeError::InvalidBar0Size); }
+    if sz < 0x1000 {
+        return Ok(0x1000);
+    }
+    if sz > (1 << 48) {
+        return Err(ProbeError::InvalidBar0Size);
+    }
     return Ok(sz);
 }
 
@@ -286,7 +292,9 @@ unsafe fn probe_controller(
     let controller = &mut *(vaddr.as_mut_ptr::<u8>() as *mut NVMeController);
     controller.pci_dev = *dev;
 
-    let bar0 = dev.read_bar(0).expect("(NVME) Unable to read bar0 for PCI device!");
+    let bar0 = dev
+        .read_bar(0)
+        .expect("(NVME) Unable to read bar0 for PCI device!");
 
     if bar0 & 0x1 != 0 {
         error!("(NVME) bar0 isn't mapped!");

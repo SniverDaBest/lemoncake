@@ -4,7 +4,7 @@ fn main() {
 
     println!("UEFI Path: {}\nBIOS Path: {}", up, bp);
 
-    let uefi = false;
+    let uefi = true;
 
     #[cfg(not(target_os = "windows"))]
     let mut copy = std::process::Command::new("cp");
@@ -42,7 +42,7 @@ fn main() {
     cmd.arg("-serial").arg("stdio");
     cmd.arg("-drive")
         .arg("id=disk,file=hd.img,if=none,format=raw");
-    cmd.arg("-device").arg("nvme,drive=disk,serial=deadbabe");
+    cmd.arg("-device").arg("nvme,drive=disk,serial=lemncake");
     cmd.arg("-machine").arg("q35");
     cmd.arg("-device").arg("vmware-svga");
     cmd.arg("-cpu").arg("host");

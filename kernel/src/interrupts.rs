@@ -1,10 +1,16 @@
-use core::sync::atomic::{AtomicU64, Ordering};
+use core::{
+    arch::asm,
+    sync::atomic::{AtomicU64, Ordering},
+};
 
-use crate::{error, gdt, hlt_loop, info, serial_print};
+use crate::{error, gdt, hlt_loop, info, serial_print, syscall};
 use lazy_static::lazy_static;
 use pic8259::ChainedPics;
 use spinning_top::Spinlock;
-use x86_64::structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode};
+use x86_64::{
+    VirtAddr,
+    structures::idt::{InterruptDescriptorTable, InterruptStackFrame, PageFaultErrorCode},
+};
 
 pub const PIC_1_OFFSET: u8 = 32;
 pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
@@ -60,6 +66,14 @@ lazy_static! {
         idt[50 + 21].set_handler_fn(ioapic_handler_21);
         idt[50 + 22].set_handler_fn(ioapic_handler_22);
         idt[50 + 23].set_handler_fn(ioapic_handler_23);
+
+        unsafe {
+            idt[0x80]
+                .set_handler_addr(VirtAddr::new(
+                    crate::syscall::int80_entry as *const u64 as u64,
+                ))
+                .set_privilege_level(x86_64::PrivilegeLevel::Ring3);
+        }
 
         idt
     };
