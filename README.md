@@ -1,4 +1,7 @@
 [![](https://tokei.rs/b1/github/SniverDaBest/lemoncake)](https://github.com/SniverDaBest/lemoncake)
+[![](https://img.shields.io/github/actions/workflow/status/SniverDaBest/lemoncake/rust.yml?style=plastic&color=fish)](https://github.com/SniverDaBest/lemoncake/actions/)
+[![](https://img.shields.io/github/languages/top/SniverDaBest/lemoncake?style=plastic&color=%23ef5124)](https://github.com/SniverDaBest/lemoncake)
+[![](https://img.shields.io/github/license/SniverDaBest/lemoncake?style=plastic&color=%23b60110)](https://github.com/SniverDaBest/lemoncake/blob/main/LICENSE)
 
 # Info
 Lemoncake is a small OS, that was originally called `lemonade`. However, I have come to dislike that name, and dislike the rest of the codebase. So, it's been scrapped, and it's renamed.\
