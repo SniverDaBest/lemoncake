@@ -1,5 +1,7 @@
 section .data
-msg db "this is what the can of dr. pepper that rolled down my keyboard wrote:", 0xA, "078956ouiytrlkjh,gfmnb vc", 0xA, 0xA, "also hi from usermode i guess"
+msg db "Orange moss potato. Key pasta carrot?", 0xA ; what the hell was i thinking when i wrote this?
+                                                    ; i mean, it's funny, so i'm 100% keeping this for a while
+                                                    ; but i also kinda wanna know what was going through my head when i wrote this...
 len equ $ - msg
 
 section .text

@@ -4,15 +4,13 @@
 #![allow(unsafe_op_in_unsafe_fn, internal_features, clippy::needless_return)]
 
 /* TODO:
- * Display drivers
- * NVMe (maybe other storage devs)
- * Scroll down when TTY cursor y pos >= TTY height
+ * VirtIO Drivers
+ * IDE
  * Shutting down the system through ACPI
+ * Different fonts
  * A better bootloader (Limine)
- * ~~Working~~ usermode
  * A C/C++ library (like glibc or musl)
  * Support external drivers
- * Different fonts
  */
 
 extern crate alloc;
@@ -21,12 +19,11 @@ pub mod acpi;
 pub mod allocator;
 pub mod apic;
 pub mod commandline;
-pub mod disks;
 pub mod display;
+pub mod drivers;
 pub mod elf;
 pub mod executor;
 pub mod font;
-pub mod fs;
 pub mod gdt;
 pub mod interrupts;
 pub mod keyboard;
@@ -38,9 +35,11 @@ pub mod sleep;
 pub mod syscall;
 
 use alloc::sync::Arc;
+use alloc::vec::Vec;
 use bootloader_api::config::{BootloaderConfig, Mapping};
 use bootloader_api::{BootInfo, entry_point};
 use commandline::run_command_line;
+use core::arch::asm;
 use core::error;
 use core::fmt::{Arguments, Write};
 use display::{Framebuffer, TTY};
@@ -55,6 +54,7 @@ use x86_64::{
     structures::paging::{FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB},
 };
 
+use crate::acpi::init_pcie_from_acpi;
 use crate::syscall::jump_to_usermode;
 
 pub static BOOTLOADER_CONFIG: BootloaderConfig = {
@@ -132,6 +132,19 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
         .expect("Unable to get ACPI tables from the RSDP!")
     };
 
+    info!("Setting up PCIe (MCFG)...");
+    if let Err(e) = unsafe { init_pcie_from_acpi(&tables, &mut mapper, &mut frame_allocator) } {
+        warning!(
+            "PCIe ECAM init failed. Falling back to legacy CF8/CFC. Error: {}",
+            e
+        );
+    } else {
+        info!("PCIe ECAM initialized using MMIO ECAM.");
+    }
+
+    info!("Scanning PCIe bus...");
+    let devs = pci::scan_pci_bus();
+
     info!("Initializing IDT & GDT...");
     interrupts::init_idt();
     gdt::init();
@@ -173,12 +186,43 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     info!("Enabling interrupts...");
     x86_64::instructions::interrupts::enable();
 
+    info!("Finding IDE devices...");
+    let mut ide_devs = Vec::new();
+    for d in devs {
+        if d.class_code == 0x1 && d.subclass == 0x1 {
+            match d.prog_if() {
+                0x5 | 0xF => ide_devs.push(d),
+
+                0x85 | 0x8F => {
+                    ide_devs.push(d);
+                    unsafe {
+                        d.enable_bus_master();
+                    }
+                }
+
+                u => {
+                    warning!(
+                        "Device has unknown/unsupported prog if {}! Assuming okay...",
+                        u
+                    );
+                    ide_devs.push(d);
+                }
+            }
+        }
+    }
+
+    info!("Found {} IDE devices!", ide_devs.len());
+
     info!("Initializing scancode queue...");
     let scancodes = Arc::new(Mutex::new(ScancodeStream::new()));
 
-    info!("Checking for NVME devices...");
-    unsafe {
-        disks::nvme::nvme_init(&mut mapper, &mut frame_allocator);
+    if ide_devs.len() > 0 {
+        info!("Initializing IDE devices...");
+        for d in ide_devs {
+            unsafe {
+                drivers::ide::init_ide(d, &mut mapper, &mut frame_allocator);
+            }
+        }
     }
 
     info!("Loading init program...");
@@ -209,8 +253,10 @@ pub fn map_user_stack(
     let user_stack_start = VirtAddr::new(0x7FFF_FFF0_0000);
     let user_stack_end = VirtAddr::new(0x7FFF_FFFF_E000);
 
-    info!("User stack range:");
-    info!("{:?} - {:?}", user_stack_start, user_stack_end);
+    info!(
+        "User stack range: {:?} - {:?}",
+        user_stack_start, user_stack_end
+    );
 
     let page_range = Page::range_inclusive(
         Page::containing_address(user_stack_start),
@@ -242,6 +288,19 @@ pub fn hlt_loop() -> ! {
     loop {
         hlt();
     }
+}
+
+pub unsafe fn rdrand() -> Result<u64, ()> {
+    let mut value: u64;
+    let mut ok: u8;
+    asm!(
+        "rdrand {val}",
+        "setc {okb}",
+        val = out(reg) value,
+        okb = out(reg_byte) ok,
+        options(nostack, nomem)
+    );
+    if ok != 0 { Ok(value) } else { Err(()) }
 }
 
 #[macro_export]

@@ -1,6 +1,6 @@
 [package]
 name = "kernel"
-version = "25.8.0"
+version = "25.10.0"
 edition = "2024"
 
 [dependencies]
@@ -14,7 +14,7 @@ pic8259 = "0.11.0"
 raw-cpuid = "10.2.0"
 spin = "0.10.0"
 spinning_top = "0.3.0"
-uart_16550 = "0.3.2"
+uart_16550 = "0.4.0"
 volatile = "0.2.6"
 x86_64 = "0.15.2"
 

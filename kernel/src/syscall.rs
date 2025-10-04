@@ -1,18 +1,11 @@
-use crate::{error, gdt::GDT, info, nftodo, println, serial_println, sleep::Sleep, warning};
+use crate::{error, info, nftodo, print, rdrand, sleep::Sleep, warning};
+use alloc::format;
 use core::{
     arch::{asm, naked_asm},
     str,
 };
 use lazy_static::lazy_static;
-use x86_64::{
-    VirtAddr,
-    registers::{
-        control::{Efer, EferFlags},
-        model_specific::{LStar, Msr, SFMask, Star},
-        rflags::RFlags,
-    },
-    structures::idt::InterruptStackFrame,
-};
+use x86_64::{VirtAddr, structures::idt::InterruptStackFrame};
 
 const MAX_PRINT: usize = 4096;
 
@@ -50,7 +43,7 @@ pub unsafe fn syscall_handler(
             let bytes = core::slice::from_raw_parts(rsi as *const u8, rdx);
             if let Ok(s) = core::str::from_utf8(bytes) {
                 match rdi {
-                    1 => println!("{}", s),
+                    1 => print!("{}", s),
                     2 => info!("{}", s),
                     3 => warning!("{}", s),
                     4 => error!("{}", s),
@@ -68,6 +61,34 @@ pub unsafe fn syscall_handler(
         3 => {
             Sleep::ms(rdi as u64);
             return 0;
+        }
+        4 => {
+            for i in 0..25 {
+                let r = rdrand();
+                if r.is_err() {
+                    continue;
+                }
+
+                return r.unwrap() as usize;
+            }
+            return usize::MAX;
+        }
+        5 => {
+            let user_ptr = rdi as usize;
+            let buf_len = rsi as usize;
+            let num = rdx as usize;
+            let istr_fmt = format!("{}", num);
+            let istr = istr_fmt.as_bytes();
+
+            let to_write = core::cmp::min(istr.len(), buf_len);
+            if to_write == 0 {
+                return usize::MAX;
+            }
+
+            let dst = core::slice::from_raw_parts_mut(user_ptr as *mut u8, to_write);
+            dst.copy_from_slice(&istr[..to_write]);
+
+            return to_write;
         }
         i => {
             error!("(SYSCALL) Invalid syscall number {}!", i);

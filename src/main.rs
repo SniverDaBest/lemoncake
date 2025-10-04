@@ -40,11 +40,12 @@ fn main() {
 
     cmd.arg("-m").arg("4G");
     cmd.arg("-serial").arg("stdio");
+    cmd.arg("-device").arg("piix3-ide,id=ide");
     cmd.arg("-drive")
-        .arg("id=disk,file=hd.img,if=none,format=raw");
-    cmd.arg("-device").arg("nvme,drive=disk,serial=lemncake");
-    cmd.arg("-machine").arg("q35");
+        .arg("id=disk,file=hd.img,format=raw,if=none");
+    cmd.arg("-device").arg("ide-hd,drive=disk,bus=ide.0");
     cmd.arg("-device").arg("vmware-svga");
+    cmd.arg("-machine").arg("q35");
     cmd.arg("-cpu").arg("host");
 
     let mut child = cmd.spawn().unwrap();
