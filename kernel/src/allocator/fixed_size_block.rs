@@ -39,6 +39,12 @@ pub struct FixedSizeBlockAllocator {
     fallback_allocator: linked_list_allocator::Heap,
 }
 
+impl Default for FixedSizeBlockAllocator {
+    fn default() -> Self {
+        return Self::new();
+    }
+}
+
 impl FixedSizeBlockAllocator {
     /// Creates an empty FixedSizeBlockAllocator.
     pub const fn new() -> Self {

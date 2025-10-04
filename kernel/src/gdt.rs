@@ -1,11 +1,7 @@
-use core::arch::asm;
-
 use lazy_static::lazy_static;
 use x86_64::VirtAddr;
 use x86_64::structures::gdt::{Descriptor, GlobalDescriptorTable, SegmentSelector};
 use x86_64::structures::tss::TaskStateSegment;
-
-use crate::info;
 
 pub const DOUBLE_FAULT_IST_INDEX: u16 = 0;
 
@@ -19,8 +15,7 @@ lazy_static! {
             pub static mut STACK: Stack = Stack([0; STACK_SIZE]);
             #[allow(static_mut_refs)]
             let stack_start = VirtAddr::from_ptr(unsafe { &STACK.0 as *const _ });
-            let stack_end = stack_start + STACK_SIZE as u64;
-            stack_end
+            stack_start + STACK_SIZE as u64
         };
 
         tss.privilege_stack_table[0] = {
@@ -30,8 +25,7 @@ lazy_static! {
             static mut KSTACK: KStack = KStack([0; KSTACK_SIZE]);
             #[allow(static_mut_refs)]
             let stack_start = VirtAddr::from_ptr(unsafe { &KSTACK.0 as *const _ });
-            let stack_end = stack_start + KSTACK_SIZE as u64;
-            stack_end
+            stack_start + KSTACK_SIZE as u64
         };
 
         tss

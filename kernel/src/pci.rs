@@ -170,16 +170,14 @@ impl PCIDevice {
         if !is_mem {
             let addr = (low & 0xFFFFFFFC) as u64;
             return Some(addr);
+        } else if is_64 {
+            let low_masked = low & 0xFFFF_FFF0;
+            let high = self.read_config(0x10 + (bar as u16) * 4 + 4);
+            let addr = ((high as u64) << 32) | (low_masked as u64);
+            return Some(addr);
         } else {
-            if is_64 {
-                let low_masked = low & 0xFFFF_FFF0;
-                let high = self.read_config(0x10 + (bar as u16) * 4 + 4);
-                let addr = ((high as u64) << 32) | (low_masked as u64);
-                return Some(addr);
-            } else {
-                let addr = (low & 0xFFFF_FFF0) as u64;
-                return Some(addr);
-            }
+            let addr = (low & 0xFFFF_FFF0) as u64;
+            return Some(addr);
         }
     }
 
@@ -196,10 +194,7 @@ impl PCIDevice {
 
         self.write_config(offset, orig_low);
 
-        let (_orig_low_saved, is_mem, is_64) = match self.read_bar(bar) {
-            Some(t) => t,
-            None => return None,
-        };
+        let (_orig_low_saved, is_mem, is_64) = self.read_bar(bar)?;
 
         if !is_mem {
             let mask = masked_low & 0xFFFF_FFFC;
@@ -208,28 +203,26 @@ impl PCIDevice {
             }
             let size = (!(mask) + 1) as u64;
             return Some(size);
-        } else {
-            if is_64 {
-                let orig_high = self.read_config(offset + 4);
-                self.write_config(offset + 4, 0xFFFF_FFFF);
-                let masked_high = self.read_config(offset + 4);
+        } else if is_64 {
+            let orig_high = self.read_config(offset + 4);
+            self.write_config(offset + 4, 0xFFFF_FFFF);
+            let masked_high = self.read_config(offset + 4);
 
-                self.write_config(offset + 4, orig_high);
+            self.write_config(offset + 4, orig_high);
 
-                let full_mask = ((masked_high as u64) << 32) | ((masked_low & 0xFFFF_FFF0) as u64);
-                if full_mask == 0 {
-                    return None;
-                }
-                let size = (!(full_mask) + 1) as u64;
-                return Some(size);
-            } else {
-                let mask = masked_low & 0xFFFF_FFF0;
-                if mask == 0 {
-                    return None;
-                }
-                let size = (!(mask) + 1) as u64;
-                return Some(size);
+            let full_mask = ((masked_high as u64) << 32) | ((masked_low & 0xFFFF_FFF0) as u64);
+            if full_mask == 0 {
+                return None;
             }
+            let size = !(full_mask) + 1;
+            return Some(size);
+        } else {
+            let mask = masked_low & 0xFFFF_FFF0;
+            if mask == 0 {
+                return None;
+            }
+            let size = (!(mask) + 1) as u64;
+            return Some(size);
         }
     }
 
@@ -257,8 +250,8 @@ impl PCIDevice {
         }
         let device_id = ((vendor_device >> 16) & 0xFFFF) as u16;
         let class_reg = Self::read_config32(bus, slot, func, 0x8);
-        let class_code = ((class_reg >> 24) & 0xFF) as u32;
-        let subclass = ((class_reg >> 16) & 0xFF) as u32;
+        let class_code = (class_reg >> 24) & 0xFF;
+        let subclass = (class_reg >> 16) & 0xFF;
         return Some(Self::new(
             vendor_id as u32,
             device_id as u32,

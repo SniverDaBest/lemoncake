@@ -17,8 +17,7 @@ lazy_static! {
         static mut KSTACK: KStack = KStack([0; KSTACK_SIZE]);
         #[allow(static_mut_refs)]
         let stack_start = VirtAddr::from_ptr(unsafe { &KSTACK.0 as *const _ });
-        let stack_end = stack_start + KSTACK_SIZE as u64;
-        stack_end
+        stack_start + KSTACK_SIZE as u64
     };
 }
 
@@ -65,7 +64,7 @@ pub unsafe fn syscall_handler(
         4 => {
             for i in 0..25 {
                 let r = rdrand();
-                if r.is_err() {
+                if r.is_none() {
                     continue;
                 }
 
@@ -74,18 +73,15 @@ pub unsafe fn syscall_handler(
             return usize::MAX;
         }
         5 => {
-            let user_ptr = rdi as usize;
-            let buf_len = rsi as usize;
-            let num = rdx as usize;
-            let istr_fmt = format!("{}", num);
+            let istr_fmt = format!("{}", rdx);
             let istr = istr_fmt.as_bytes();
 
-            let to_write = core::cmp::min(istr.len(), buf_len);
+            let to_write = core::cmp::min(istr.len(), rsi);
             if to_write == 0 {
                 return usize::MAX;
             }
 
-            let dst = core::slice::from_raw_parts_mut(user_ptr as *mut u8, to_write);
+            let dst = core::slice::from_raw_parts_mut(rdi as *mut u8, to_write);
             dst.copy_from_slice(&istr[..to_write]);
 
             return to_write;

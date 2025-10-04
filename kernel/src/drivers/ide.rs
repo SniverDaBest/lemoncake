@@ -201,7 +201,7 @@ unsafe fn ide_read_buffer(channel: u8, reg: u8, buffer: &mut [u32], quads: u32) 
     }
 
     let port_addr = if reg < 0x08 {
-        CHANNELS.lock()[channel as usize].base + reg as u16 - 0x00
+        CHANNELS.lock()[channel as usize].base + reg as u16
     } else if reg < 0x0C {
         CHANNELS.lock()[channel as usize].base + reg as u16 - 0x06
     } else if reg < 0x0E {
@@ -391,7 +391,7 @@ pub unsafe fn init_ide(
             let mut err = 0u8;
             let mut status: u8;
 
-            IDE_DEVICES.lock()[count as usize].rsv0 = 0;
+            IDE_DEVICES.lock()[count].rsv0 = 0;
 
             ide_write(i, ATA_REG_HDDEVSEL, 0xA0 | (j << 4));
             Sleep::ms(1);
@@ -418,9 +418,7 @@ pub unsafe fn init_ide(
                 let cl = ide_read(i, ATA_REG_LBA1);
                 let ch = ide_read(i, ATA_REG_LBA2);
 
-                if cl == 0x14 && ch == 0xEB {
-                    typ = IDE_ATAPI;
-                } else if cl == 0x69 && ch == 0x96 {
+                if (cl == 0x14 && ch == 0xEB) || (cl == 0x69 && ch == 0x96) {
                     typ = IDE_ATAPI;
                 } else {
                     continue;
@@ -526,7 +524,7 @@ pub unsafe fn ide_ata_access(
 
     if lba >= 0x10000000 {
         lba_mode = 2;
-        lba_io[0] = ((lba & 0x000000FF) >> 0) as u8;
+        lba_io[0] = (lba & 0x000000FF) as u8;
         lba_io[1] = ((lba & 0x0000FF00) >> 8) as u8;
         lba_io[2] = ((lba & 0x00FF0000) >> 16) as u8;
         lba_io[3] = ((lba & 0xFF000000) >> 24) as u8;
@@ -535,7 +533,7 @@ pub unsafe fn ide_ata_access(
         head = 0;
     } else if IDE_DEVICES.lock()[drive as usize].capabilities & 0x200 != 0 {
         lba_mode = 1;
-        lba_io[0] = ((lba & 0x00000FF) >> 0) as u8;
+        lba_io[0] = (lba & 0x00000FF) as u8;
         lba_io[1] = ((lba & 0x000FF00) >> 8) as u8;
         lba_io[2] = ((lba & 0x0FF0000) >> 16) as u8;
         lba_io[3] = 0;
@@ -547,7 +545,7 @@ pub unsafe fn ide_ata_access(
         sect = ((lba % 63) + 1) as u8;
         cyl = ((lba + 1 - sect as u32) / (16 * 63)) as u16;
         lba_io[0] = sect;
-        lba_io[1] = ((cyl >> 0) & 0xFF) as u8;
+        lba_io[1] = (cyl & 0xFF) as u8;
         lba_io[2] = ((cyl >> 8) & 0xFF) as u8;
         lba_io[3] = 0;
         lba_io[4] = 0;
@@ -621,43 +619,41 @@ pub unsafe fn ide_ata_access(
             // dma write
             nftodo!("(IDE) ide_ata_access - GOTO: // dma write");
         }
-    } else {
-        if direction == 0 {
-            for _ in 0..numsects {
-                if err == ide_polling(channel as u8, 1) {
-                    return err;
-                }
-
-                asm!(
-                    "rep insw",
-                    in("ecx") words,
-                    in("dx") bus,
-                    inout("edi") edi => _,
-                    options(preserves_flags, nostack),
-                );
-
-                edi += words * 2;
-            }
-        } else {
-            for _ in 0..numsects {
-                ide_polling(channel as u8, 0);
-                asm!(
-                    "rep outsw",
-                    in("ecx") words,
-                    in("dx") bus,
-                    in("esi") edi,
-                    options(preserves_flags, nostack),
-                );
-                edi += words * 2;
+    } else if direction == 0{
+        for _ in 0..numsects {
+            if err == ide_polling(channel as u8, 1) {
+                return err;
             }
 
-            if !ide_cache_flush(channel as u8, lba_mode) {
-                error!("(IDE) Timed out while flushing cache!");
-                return u8::MAX;
-            }
+            asm!(
+                "rep insw",
+                in("ecx") words,
+                in("dx") bus,
+                inout("edi") edi => _,
+                options(preserves_flags, nostack),
+            );
 
-            ide_polling(channel as u8, 0);
+            edi += words * 2;
         }
+    } else {
+        for _ in 0..numsects {
+            ide_polling(channel as u8, 0);
+            asm!(
+                "rep outsw",
+                in("ecx") words,
+                in("dx") bus,
+                in("esi") edi,
+                options(preserves_flags, nostack),
+            );
+            edi += words * 2;
+        }
+
+        if !ide_cache_flush(channel as u8, lba_mode) {
+            error!("(IDE) Timed out while flushing cache!");
+            return u8::MAX;
+        }
+
+        ide_polling(channel as u8, 0);
     }
 
     return 0;
@@ -698,7 +694,7 @@ pub unsafe fn ide_atapi_read(
     packet[2] = ((lba >> 26) & 0xFF) as u8;
     packet[3] = ((lba >> 16) & 0xFF) as u8;
     packet[4] = ((lba >> 8) & 0xFF) as u8;
-    packet[5] = ((lba >> 0) & 0xFF) as u8;
+    packet[5] = (lba & 0xFF) as u8;
     packet[6] = 0x0;
     packet[7] = 0x0;
     packet[8] = 0x0;

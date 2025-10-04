@@ -1,9 +1,6 @@
-use core::{
-    arch::asm,
-    sync::atomic::{AtomicU64, Ordering},
-};
+use core::sync::atomic::{AtomicU64, Ordering};
 
-use crate::{error, gdt, hlt_loop, info, serial_print, syscall};
+use crate::{error, gdt, hlt_loop, info, serial_print};
 use lazy_static::lazy_static;
 use pic8259::ChainedPics;
 use spinning_top::Spinlock;
@@ -14,7 +11,7 @@ use x86_64::{
 
 pub const PIC_1_OFFSET: u8 = 32;
 pub const PIC_2_OFFSET: u8 = PIC_1_OFFSET + 8;
-pub const USING_APIC: Spinlock<bool> = Spinlock::new(true);
+pub static USING_APIC: Spinlock<bool> = Spinlock::new(true);
 pub static TICK_COUNT: AtomicU64 = AtomicU64::new(0);
 
 pub static PICS: spin::Mutex<ChainedPics> =
@@ -42,30 +39,30 @@ lazy_static! {
         idt[48].set_handler_fn(timer_interrupt_handler);
         idt[49].set_handler_fn(timer_interrupt_handler2);
 
-        idt[50 + 0].set_handler_fn(ioapic_handler_0);
-        idt[50 + 1].set_handler_fn(ioapic_handler_1);
-        idt[50 + 2].set_handler_fn(ioapic_handler_2);
-        idt[50 + 3].set_handler_fn(ioapic_handler_3);
-        idt[50 + 4].set_handler_fn(ioapic_handler_4);
-        idt[50 + 5].set_handler_fn(ioapic_handler_5);
-        idt[50 + 6].set_handler_fn(ioapic_handler_6);
-        idt[50 + 7].set_handler_fn(ioapic_handler_7);
-        idt[50 + 8].set_handler_fn(ioapic_handler_8);
-        idt[50 + 9].set_handler_fn(ioapic_handler_9);
-        idt[50 + 10].set_handler_fn(ioapic_handler_10);
-        idt[50 + 11].set_handler_fn(ioapic_handler_11);
-        idt[50 + 12].set_handler_fn(ioapic_handler_12);
-        idt[50 + 13].set_handler_fn(ioapic_handler_13);
-        idt[50 + 14].set_handler_fn(ioapic_handler_14);
-        idt[50 + 15].set_handler_fn(ioapic_handler_15);
-        idt[50 + 16].set_handler_fn(ioapic_handler_16);
-        idt[50 + 17].set_handler_fn(ioapic_handler_17);
-        idt[50 + 18].set_handler_fn(ioapic_handler_18);
-        idt[50 + 19].set_handler_fn(ioapic_handler_19);
-        idt[50 + 20].set_handler_fn(ioapic_handler_20);
-        idt[50 + 21].set_handler_fn(ioapic_handler_21);
-        idt[50 + 22].set_handler_fn(ioapic_handler_22);
-        idt[50 + 23].set_handler_fn(ioapic_handler_23);
+        idt[50].set_handler_fn(ioapic_handler_0);
+        idt[51].set_handler_fn(ioapic_handler_1);
+        idt[52].set_handler_fn(ioapic_handler_2);
+        idt[53].set_handler_fn(ioapic_handler_3);
+        idt[54].set_handler_fn(ioapic_handler_4);
+        idt[55].set_handler_fn(ioapic_handler_5);
+        idt[56].set_handler_fn(ioapic_handler_6);
+        idt[57].set_handler_fn(ioapic_handler_7);
+        idt[58].set_handler_fn(ioapic_handler_8);
+        idt[59].set_handler_fn(ioapic_handler_9);
+        idt[60].set_handler_fn(ioapic_handler_10);
+        idt[61].set_handler_fn(ioapic_handler_11);
+        idt[62].set_handler_fn(ioapic_handler_12);
+        idt[63].set_handler_fn(ioapic_handler_13);
+        idt[64].set_handler_fn(ioapic_handler_14);
+        idt[65].set_handler_fn(ioapic_handler_15);
+        idt[66].set_handler_fn(ioapic_handler_16);
+        idt[67].set_handler_fn(ioapic_handler_17);
+        idt[68].set_handler_fn(ioapic_handler_18);
+        idt[69].set_handler_fn(ioapic_handler_19);
+        idt[70].set_handler_fn(ioapic_handler_20);
+        idt[71].set_handler_fn(ioapic_handler_21);
+        idt[72].set_handler_fn(ioapic_handler_22);
+        idt[73].set_handler_fn(ioapic_handler_23);
 
         unsafe {
             idt[0x80]

@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 #![feature(core_intrinsics, abi_x86_interrupt, str_from_raw_parts)]
-#![allow(unsafe_op_in_unsafe_fn, internal_features, clippy::needless_return)]
+#![allow(unsafe_op_in_unsafe_fn, internal_features, clippy::needless_return, clippy::missing_safety_doc, clippy::iter_nth_zero, clippy::empty_loop)]
 
 /* TODO:
  * VirtIO Drivers
@@ -157,12 +157,11 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     if let ::acpi::InterruptModel::Apic(apic) = pi.interrupt_model {
         info!("Using APIC!");
         let lapic = unsafe { apic::LocalApic::init(PhysAddr::new(apic.local_apic_address)) };
-        let mut freq = 1000_000;
-        if let Some(cpuid) = apic::cpuid() {
-            if let Some(tsc) = cpuid.get_tsc_info() {
-                freq = tsc.nominal_frequency();
-            }
+        let mut freq = 1_000_000;
+        if let Some(cpuid) = apic::cpuid() && let Some(tsc) = cpuid.get_tsc_info() {
+            freq = tsc.nominal_frequency();
         }
+
         unsafe {
             lapic.set_div_conf(0b1011);
             lapic.set_lvt_timer((1 << 17) + 48);
@@ -214,9 +213,10 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     info!("Found {} IDE devices!", ide_devs.len());
 
     info!("Initializing scancode queue...");
+    #[allow(unused)]
     let scancodes = Arc::new(Mutex::new(ScancodeStream::new()));
 
-    if ide_devs.len() > 0 {
+    if !ide_devs.is_empty() {
         info!("Initializing IDE devices...");
         for d in ide_devs {
             unsafe {
@@ -241,6 +241,7 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
         jump_to_usermode(e.as_u64(), 0x7FFF_FFFF_E000);
     }
 
+    #[allow(unused)]
     let mut e = Executor::new();
     e.spawn(Task::new(run_command_line(scancodes)));
     e.run();
@@ -290,7 +291,7 @@ pub fn hlt_loop() -> ! {
     }
 }
 
-pub unsafe fn rdrand() -> Result<u64, ()> {
+pub unsafe fn rdrand() -> Option<u64> {
     let mut value: u64;
     let mut ok: u8;
     asm!(
@@ -300,7 +301,7 @@ pub unsafe fn rdrand() -> Result<u64, ()> {
         okb = out(reg_byte) ok,
         options(nostack, nomem)
     );
-    if ok != 0 { Ok(value) } else { Err(()) }
+    if ok != 0 { Some(value) } else { None }
 }
 
 #[macro_export]

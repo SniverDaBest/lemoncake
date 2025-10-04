@@ -142,7 +142,7 @@ pub fn alloc(
         return None;
     }
 
-    return alloc_pages(mapper, frame_allocator, ((num_bytes + 4095) / 4096).max(2));
+    return alloc_pages(mapper, frame_allocator, num_bytes.div_ceil(4096).max(2));
 }
 
 pub fn free(
@@ -154,7 +154,7 @@ pub fn free(
         return Ok(());
     }
 
-    let num_pages = (num_bytes + 4095) / 4096;
+    let num_pages = num_bytes.div_ceil(4096);
 
     for i in 0..num_pages {
         let virt = virt_addr + i as u64 * 4096;

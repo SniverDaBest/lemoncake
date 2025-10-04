@@ -9,6 +9,12 @@ pub struct BumpAllocator {
     allocations: usize,
 }
 
+impl Default for BumpAllocator {
+    fn default() -> Self {
+        return Self::new();
+    }
+}
+
 impl BumpAllocator {
     /// Creates a new empty bump allocator.
     pub const fn new() -> Self {

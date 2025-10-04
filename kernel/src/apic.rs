@@ -175,14 +175,13 @@ pub const IOAPICID: u32 = 0;
 pub const IOAPICVER: u32 = 1;
 impl IoApic {
     pub fn init(info: &acpi::platform::interrupt::IoApic) -> &Self {
-        let this = IO_APIC_0.get_or_init(move || Self {
+        return IO_APIC_0.get_or_init(move || Self {
             id: info.id,
             virt_address: unsafe {
                 VirtAddr::new(PhysAddr::new(info.address as u64).as_u64() + PMO)
             },
             global_system_int: info.global_system_interrupt_base,
         });
-        this
     }
     pub unsafe fn set_sel(&self, reg: u32) {
         volatile_store(self.virt_address.as_u64() as *mut u32, reg);

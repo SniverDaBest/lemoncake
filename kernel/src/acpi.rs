@@ -1,13 +1,12 @@
 use crate::{PMO, info, warning};
 use acpi::AcpiTables;
-use acpi::sdt::Signature;
 use acpi::{AcpiTable, PhysicalMapping, mcfg::Mcfg, sdt::SdtHeader};
 use core::mem::size_of;
 use core::ptr::NonNull;
 use x86_64::{
     PhysAddr, VirtAddr,
     structures::paging::{
-        FrameAllocator, Mapper, Page, PageSize, PageTableFlags, PhysFrame, Size4KiB, Translate,
+        FrameAllocator, Page, PageSize, PageTableFlags, PhysFrame, Size4KiB, Translate,
         mapper::MapperAllSizes,
     },
 };
@@ -51,7 +50,7 @@ where
         return Err("MCFG table has no entries");
     }
     let entries_bytes = total_len - hdr_size;
-    if entries_bytes % size_of::<McfgEntry>() != 0 {
+    if !entries_bytes.is_multiple_of(size_of::<McfgEntry>()) {
         return Err("MCFG entries size not multiple of McfgEntry");
     }
     let entry_count = entries_bytes / size_of::<McfgEntry>();
@@ -77,7 +76,7 @@ where
     let bus_count = (entry.end_bus as usize).saturating_sub(entry.start_bus as usize) + 1;
     let ecam_size = bus_count.checked_shl(20).ok_or("ECAM size overflow")?;
 
-    let phys_base = PhysAddr::new(entry.base_address as u64);
+    let phys_base = PhysAddr::new(entry.base_address);
 
     let virt_base = map_ecam_region(phys_base, ecam_size, mapper, frame_allocator)
         .ok_or("Failed to map ECAM region")?;
@@ -114,9 +113,9 @@ where
 
     let start_addr = start_frame.start_address().as_u64();
     let end_addr = end_frame.start_address().as_u64();
-    let frame_count = ((end_addr - start_addr) / Size4KiB::SIZE as u64) + 1;
+    let frame_count = ((end_addr - start_addr) / Size4KiB::SIZE) + 1;
 
-    let virt_base = VirtAddr::new(phys_base.as_u64() + crate::PMO as u64);
+    let virt_base = VirtAddr::new(phys_base.as_u64() + crate::PMO);
 
     if let Some(mapped_phys) = mapper.translate_addr(virt_base) {
         if mapped_phys.as_u64() == start_frame.start_address().as_u64() {
@@ -145,7 +144,7 @@ where
     for i in 0..frame_count {
         match mapper.map_to(current_page, current_frame, flags, frame_allocator) {
             Ok(flush) => {
-                let _ = flush.flush();
+                flush.flush();
             }
             Err(e) => {
                 warning!(

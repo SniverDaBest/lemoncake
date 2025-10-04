@@ -98,7 +98,7 @@ impl Framebuffer {
         self.put_pixel(x + 5, y, (r, g, b));
         self.put_pixel(x + 5, y + 1, (r, g, b));
         // mouth
-        self.put_pixel(x + 0, y + 4, (r, g, b));
+        self.put_pixel(x, y + 4, (r, g, b));
         self.put_pixel(x + 1, y + 5, (r, g, b));
         self.put_pixel(x + 2, y + 5, (r, g, b));
         self.put_pixel(x + 3, y + 5, (r, g, b));
@@ -119,7 +119,7 @@ impl Framebuffer {
         self.put_pixel(x + 5, y, (r, g, b));
         self.put_pixel(x + 5, y + 1, (r, g, b));
         // mouth
-        self.put_pixel(x + 0, y + 5, (r, g, b));
+        self.put_pixel(x, y + 5, (r, g, b));
         self.put_pixel(x + 1, y + 4, (r, g, b));
         self.put_pixel(x + 2, y + 4, (r, g, b));
         self.put_pixel(x + 3, y + 4, (r, g, b));
@@ -157,6 +157,12 @@ pub struct TTY {
     cursor_x: usize,
     cursor_y: usize,
     fg_color: (u8, u8, u8, u8),
+}
+
+impl Default for TTY {
+    fn default() -> Self {
+        return Self::new();
+    }
 }
 
 impl TTY {
@@ -289,42 +295,40 @@ impl TTY {
     pub fn write_str(&mut self, s: &str) {
         let mut chars = s.chars().peekable();
         while let Some(c) = chars.next() {
-            if c == '\x1b' {
-                if chars.peek() == Some(&'[') {
-                    chars.next();
-                    let mut num_buf = [0u8; 3];
-                    let mut num_len = 0;
-                    while let Some(&d) = chars.peek() {
-                        if d >= '0' && d <= '9' && num_len < 3 {
-                            num_buf[num_len] = d as u8;
-                            num_len += 1;
-                            chars.next();
-                        } else {
-                            break;
-                        }
-                    }
-                    if chars.peek() == Some(&'m') {
+            if c == '\x1b' && chars.peek() == Some(&'[') {
+                chars.next();
+                let mut num_buf = [0u8; 3];
+                let mut num_len = 0;
+                while let Some(&d) = chars.peek() {
+                    if d.is_ascii_digit() && num_len < 3 {
+                        num_buf[num_len] = d as u8;
+                        num_len += 1;
                         chars.next();
-                        if num_len > 0 {
-                            let code = core::str::from_utf8(&num_buf[..num_len]).unwrap_or("0");
-                            let code = code.parse::<u8>().unwrap_or(0);
-                            self.fg_color = match code {
-                                30 => (0, 0, 0, 255),       // Black
-                                31 => (243, 139, 168, 255), // Red
-                                32 => (166, 227, 161, 255), // Green
-                                33 => (249, 226, 175, 255), // Yellow
-                                34 => (137, 180, 250, 255), // Blue
-                                35 => (203, 166, 247, 255), // Magenta
-                                36 => (0, 170, 170, 255),   // Cyan
-                                37 => (255, 255, 255, 255), // White
-                                0 => (205, 214, 244, 255),  // Reset
-                                _ => self.fg_color,
-                            };
-                        } else {
-                            self.fg_color = (205, 214, 244, 255);
-                        }
-                        continue;
+                    } else {
+                        break;
                     }
+                }
+                if chars.peek() == Some(&'m') {
+                    chars.next();
+                    if num_len > 0 {
+                        let code = core::str::from_utf8(&num_buf[..num_len]).unwrap_or("0");
+                        let code = code.parse::<u8>().unwrap_or(0);
+                        self.fg_color = match code {
+                            30 => (0, 0, 0, 255),       // Black
+                            31 => (243, 139, 168, 255), // Red
+                            32 => (166, 227, 161, 255), // Green
+                            33 => (249, 226, 175, 255), // Yellow
+                            34 => (137, 180, 250, 255), // Blue
+                            35 => (203, 166, 247, 255), // Magenta
+                            36 => (0, 170, 170, 255),   // Cyan
+                            37 => (255, 255, 255, 255), // White
+                            0 => (205, 214, 244, 255),  // Reset
+                            _ => self.fg_color,
+                        };
+                    } else {
+                        self.fg_color = (205, 214, 244, 255);
+                    }
+                    continue;
                 }
             }
             match c {

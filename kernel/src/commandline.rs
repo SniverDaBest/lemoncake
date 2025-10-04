@@ -49,6 +49,12 @@ pub struct CommandRegistry {
     commands: Vec<Command>,
 }
 
+impl Default for CommandRegistry {
+    fn default() -> Self {
+        return Self::new();
+    }
+}
+
 impl CommandRegistry {
     pub fn new() -> Self {
         return CommandRegistry {
@@ -81,15 +87,7 @@ impl CommandRegistry {
     }
 
     pub fn search(&self, name: &str) -> Option<&Command> {
-        for cmd in self.commands.iter() {
-            if cmd.name == name {
-                return Some(cmd);
-            } else if cmd.aliases.contains(&name) {
-                return Some(cmd);
-            }
-        }
-
-        return None;
+        return self.commands.iter().find(|&cmd| cmd.name == name || cmd.aliases.contains(&name)).map(|v| v as _);
     }
 
     pub fn exec_command(&self, input: Vec<&str>) -> Option<i32> {
@@ -97,10 +95,7 @@ impl CommandRegistry {
             return None;
         }
         let cmd = self.search(input[0]);
-        if cmd.is_none() {
-            return None;
-        }
-        return Some((cmd.unwrap().func)(self, input[1..].to_vec()));
+        return Some((cmd?.func)(self, input[1..].to_vec()));
     }
 }
 
@@ -157,9 +152,9 @@ fn shutdown(_registry: &CommandRegistry, args: Vec<&str>) -> i32 {
 
     unsafe {
         match args[0].to_lowercase().as_str() {
-            "qemu" => Port::new(0x604).write(0x2000 as u32),
-            "bochs" | "old_qemu" => Port::new(0xB004).write(0x2000 as u32),
-            "vbox" | "virtualbox" => Port::new(0x4004).write(0x3400 as u32),
+            "qemu" => Port::new(0x604).write(0x2000u32),
+            "bochs" | "old_qemu" => Port::new(0xB004).write(0x2000u32),
+            "vbox" | "virtualbox" => Port::new(0x4004).write(0x3400u32),
             t => println!(
                 "Type \"{}\" is invalid!\nUsage:\n  shutdown <vm_type>\n  poweroff <vm_type>\nExamples:\n  shutdown qemu\n  shutdown bochs\n  poweroff vbox\n  poweroff old_qemu\nNote: old_qemu is the same as bochs.",
                 t
@@ -269,34 +264,32 @@ pub async fn run_command_line(scancodes: Arc<Mutex<ScancodeStream>>) {
 
     loop {
         while let Some(scancode) = scs.next().await {
-            if let Ok(Some(key_event)) = keyboard.add_byte(scancode) {
-                if let Some(key) = keyboard.process_keyevent(key_event) {
-                    match key {
-                        DecodedKey::Unicode(character) => match character {
-                            '\x08' => {
-                                input_buffer.pop();
-                                print!("\x08");
-                            }
-                            '\n' => {
-                                println!();
-                                prev_ret_code = process_command(&input_buffer, prev_ret_code);
-                                input_buffer.clear();
-                                print!("[{}] > ", prev_ret_code);
-                            }
-                            c => {
-                                print!("{}", c);
-                                input_buffer.push(c);
-                            }
-                        },
-                        DecodedKey::RawKey(_) => {}
-                    }
+            if let Ok(Some(key_event)) = keyboard.add_byte(scancode) && let Some(key) = keyboard.process_keyevent(key_event) {
+                match key {
+                    DecodedKey::Unicode(character) => match character {
+                        '\x08' => {
+                            input_buffer.pop();
+                            print!("\x08");
+                        }
+                        '\n' => {
+                            println!();
+                            prev_ret_code = process_command(input_buffer.as_str(), prev_ret_code);
+                            input_buffer.clear();
+                            print!("[{}] > ", prev_ret_code);
+                        }
+                        c => {
+                            print!("{}", c);
+                            input_buffer.push(c);
+                        }
+                    },
+                    DecodedKey::RawKey(_) => {}
                 }
             }
         }
     }
 }
 
-fn process_command(buf: &String, prev_ret_code: i32) -> i32 {
+fn process_command(buf: &str, prev_ret_code: i32) -> i32 {
     if buf.trim().starts_with("#") || buf.trim().is_empty() {
         return prev_ret_code;
     }
@@ -308,15 +301,17 @@ fn process_command(buf: &String, prev_ret_code: i32) -> i32 {
 
     let data: Vec<&str> = buf.trim().split(' ').collect();
 
-    let cmd_name = data.get(0).copied().unwrap_or("");
+    let cmd_name = data.first().copied().unwrap_or("");
 
     if let Some(registry) = COMMAND_REGISTRY.lock().as_ref() {
         let x = registry.exec_command(data);
-        if x.is_none() {
-            println!("Command '{}' not found.", cmd_name);
-            return -1;
-        } else {
-            return x.unwrap();
+
+        return match x {
+            Some(i) => i,
+            None => {
+                println!("Command '{}' not found.", cmd_name);
+                -1
+            }
         }
     } else {
         error!("(CMDLINE) Unable to lock and take access of the command registry!");
