@@ -349,12 +349,15 @@ pub unsafe fn init_ide(
     let frame = frame_allocator
         .allocate_frame()
         .expect("(IDE) Unable to init frame!");
-    mapper.map_to(
-        Page::containing_address(VirtAddr::new(dev.bar_address(4).unwrap())),
-        frame,
-        PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
-        frame_allocator,
-    ).expect("(IDE) Unable to map BAR4!").flush();
+    mapper
+        .map_to(
+            Page::containing_address(VirtAddr::new(dev.bar_address(4).unwrap())),
+            frame,
+            PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+            frame_allocator,
+        )
+        .expect("(IDE) Unable to map BAR4!")
+        .flush();
 
     let mut count = 0;
     let mut typ = 0u8;
@@ -619,7 +622,7 @@ pub unsafe fn ide_ata_access(
             // dma write
             nftodo!("(IDE) ide_ata_access - GOTO: // dma write");
         }
-    } else if direction == 0{
+    } else if direction == 0 {
         for _ in 0..numsects {
             if err == ide_polling(channel as u8, 1) {
                 return err;

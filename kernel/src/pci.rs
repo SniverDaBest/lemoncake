@@ -21,12 +21,12 @@ pub fn ecam_read32(bus: u8, slot: u8, func: u8, offset: u16) -> Option<u32> {
         return None;
     }
 
-    let addr = (base as *const u32).wrapping_add(
-        ((bus as usize) << 20)
-            + ((slot as usize) << 15)
-            + ((func as usize) << 12)
-            + (offset as usize / 4),
-    );
+    let addr = (base
+        + ((bus as usize) << 20)
+        + ((slot as usize) << 15)
+        + ((func as usize) << 12)
+        + (offset as usize)) as *const u32;
+
     return Some(unsafe { core::ptr::read_volatile(addr) });
 }
 

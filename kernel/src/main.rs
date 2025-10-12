@@ -1,7 +1,7 @@
 #![no_std]
 #![no_main]
 #![feature(core_intrinsics, abi_x86_interrupt, str_from_raw_parts)]
-#![allow(unsafe_op_in_unsafe_fn, internal_features, clippy::needless_return, clippy::missing_safety_doc, clippy::iter_nth_zero, clippy::empty_loop)]
+#![allow(unsafe_op_in_unsafe_fn, internal_features, clippy::needless_return, clippy::missing_safety_doc, clippy::empty_loop)]
 
 /* TODO:
  * VirtIO Drivers
@@ -86,7 +86,7 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     let pkg_ver = env!("CARGO_PKG_VERSION");
     info!(
         "Running Lemoncake version {}m{}",
-        pkg_ver.split(".").nth(0).unwrap_or("?"),
+        pkg_ver.split(".").next().unwrap_or("?"),
         pkg_ver.split(".").nth(1).unwrap_or("?")
     );
 
@@ -189,6 +189,7 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     let mut ide_devs = Vec::new();
     for d in devs {
         if d.class_code == 0x1 && d.subclass == 0x1 {
+            unsafe { d.write_config_u8(0x09, d.read_config_u8(0x09) | 0x05) };
             match d.prog_if() {
                 0x5 | 0xF => ide_devs.push(d),
 
@@ -199,9 +200,17 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
                     }
                 }
 
+                0x0 | 0xA => {
+                    error!("Device is unsupported, due to it being ISA compat mode only! (no bus mastering)");
+                }
+
+                0x80 | 0x8A => {
+                    error!("Device is unsupported, due to it being ISA compat mode only! (w/ bus mastering)");
+                }
+
                 u => {
                     warning!(
-                        "Device has unknown/unsupported prog if {}! Assuming okay...",
+                        "Device has unknown prog if {:#x}! Assuming okay...",
                         u
                     );
                     ide_devs.push(d);

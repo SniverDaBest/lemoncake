@@ -87,7 +87,11 @@ impl CommandRegistry {
     }
 
     pub fn search(&self, name: &str) -> Option<&Command> {
-        return self.commands.iter().find(|&cmd| cmd.name == name || cmd.aliases.contains(&name)).map(|v| v as _);
+        return self
+            .commands
+            .iter()
+            .find(|&cmd| cmd.name == name || cmd.aliases.contains(&name))
+            .map(|v| v as _);
     }
 
     pub fn exec_command(&self, input: Vec<&str>) -> Option<i32> {
@@ -264,7 +268,9 @@ pub async fn run_command_line(scancodes: Arc<Mutex<ScancodeStream>>) {
 
     loop {
         while let Some(scancode) = scs.next().await {
-            if let Ok(Some(key_event)) = keyboard.add_byte(scancode) && let Some(key) = keyboard.process_keyevent(key_event) {
+            if let Ok(Some(key_event)) = keyboard.add_byte(scancode)
+                && let Some(key) = keyboard.process_keyevent(key_event)
+            {
                 match key {
                     DecodedKey::Unicode(character) => match character {
                         '\x08' => {
@@ -312,7 +318,7 @@ fn process_command(buf: &str, prev_ret_code: i32) -> i32 {
                 println!("Command '{}' not found.", cmd_name);
                 -1
             }
-        }
+        };
     } else {
         error!("(CMDLINE) Unable to lock and take access of the command registry!");
         return -3;
