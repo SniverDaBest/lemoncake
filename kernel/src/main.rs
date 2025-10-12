@@ -1,7 +1,13 @@
 #![no_std]
 #![no_main]
 #![feature(core_intrinsics, abi_x86_interrupt, str_from_raw_parts)]
-#![allow(unsafe_op_in_unsafe_fn, internal_features, clippy::needless_return, clippy::missing_safety_doc, clippy::empty_loop)]
+#![allow(
+    unsafe_op_in_unsafe_fn,
+    internal_features,
+    clippy::needless_return,
+    clippy::missing_safety_doc,
+    clippy::empty_loop
+)]
 
 /* TODO:
  * VirtIO Drivers
@@ -158,7 +164,9 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
         info!("Using APIC!");
         let lapic = unsafe { apic::LocalApic::init(PhysAddr::new(apic.local_apic_address)) };
         let mut freq = 1_000_000;
-        if let Some(cpuid) = apic::cpuid() && let Some(tsc) = cpuid.get_tsc_info() {
+        if let Some(cpuid) = apic::cpuid()
+            && let Some(tsc) = cpuid.get_tsc_info()
+        {
             freq = tsc.nominal_frequency();
         }
 
@@ -201,18 +209,19 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
                 }
 
                 0x0 | 0xA => {
-                    error!("Device is unsupported, due to it being ISA compat mode only! (no bus mastering)");
+                    error!(
+                        "Device is unsupported, due to it being ISA compat mode only! (no bus mastering)"
+                    );
                 }
 
                 0x80 | 0x8A => {
-                    error!("Device is unsupported, due to it being ISA compat mode only! (w/ bus mastering)");
+                    error!(
+                        "Device is unsupported, due to it being ISA compat mode only! (w/ bus mastering)"
+                    );
                 }
 
                 u => {
-                    warning!(
-                        "Device has unknown prog if {:#x}! Assuming okay...",
-                        u
-                    );
+                    warning!("Device has unknown prog if {:#x}! Assuming okay...", u);
                     ide_devs.push(d);
                 }
             }
