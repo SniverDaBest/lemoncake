@@ -40,6 +40,7 @@ pub mod serial;
 pub mod sleep;
 pub mod syscall;
 
+use acpi::init_pcie_from_acpi;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bootloader_api::config::{BootloaderConfig, Mapping};
@@ -53,13 +54,11 @@ use keyboard::ScancodeStream;
 use memory::BootInfoFrameAllocator;
 use spin::Mutex;
 use spinning_top::Spinlock;
+use syscall::jump_to_usermode;
 use x86_64::{
     PhysAddr, VirtAddr,
     structures::paging::{FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB},
 };
-
-use crate::acpi::init_pcie_from_acpi;
-use crate::syscall::jump_to_usermode;
 
 pub static BOOTLOADER_CONFIG: BootloaderConfig = {
     let mut config = BootloaderConfig::new_default();
@@ -124,11 +123,7 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     info!("Resolution: {}x{}", res.0, res.1);
 
     info!("Displaying logo...");
-    png::draw_png(
-        include_bytes!("../../assets/logo.png"),
-        res.0 - 64,
-        0,
-    );
+    png::draw_png(include_bytes!("../../assets/logo.png"), res.0 - 64, 0);
 
     info!("Getting ACPI information...");
     let tables = unsafe {

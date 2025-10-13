@@ -1,7 +1,7 @@
 use crate::FRAMEBUFFER;
+use crate::font::FONT_HEIGHT;
 use bootloader_api::info::{FrameBuffer, PixelFormat};
 use core::fmt::{self, Write};
-use crate::font::FONT_HEIGHT;
 
 pub struct Framebuffer {
     pub fb: FrameBuffer,
@@ -205,7 +205,13 @@ impl TTY {
 
     pub fn clear_tty(&mut self) {
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-            fb.draw_rect(0, 0, self.width * 8, self.height * unsafe { FONT_HEIGHT }, (30, 30, 46));
+            fb.draw_rect(
+                0,
+                0,
+                self.width * 8,
+                self.height * unsafe { FONT_HEIGHT },
+                (30, 30, 46),
+            );
         }
 
         for i in 0..self.text_buf.len() {
@@ -233,14 +239,25 @@ impl TTY {
         }
 
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-            fb.draw_rect(0, 0, self.width * 8, self.height * unsafe { FONT_HEIGHT }, (30, 30, 46));
+            fb.draw_rect(
+                0,
+                0,
+                self.width * 8,
+                self.height * unsafe { FONT_HEIGHT },
+                (30, 30, 46),
+            );
         }
 
         for y in 0..self.height {
             for x in 0..self.width {
                 let cell = self.text_buf[y * self.width + x];
                 if cell.ch != '\x00' {
-                    crate::font::draw_char_psf(x * 8, y * unsafe { FONT_HEIGHT }, cell.ch, cell.color);
+                    crate::font::draw_char_psf(
+                        x * 8,
+                        y * unsafe { FONT_HEIGHT },
+                        cell.ch,
+                        cell.color,
+                    );
                 }
             }
         }
@@ -284,12 +301,23 @@ impl TTY {
         }
 
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-            fb.draw_rect(0, self.cursor_y * unsafe { FONT_HEIGHT }, self.width * 8, 8, (30, 30, 46));
+            fb.draw_rect(
+                0,
+                self.cursor_y * unsafe { FONT_HEIGHT },
+                self.width * 8,
+                8,
+                (30, 30, 46),
+            );
         }
 
         for x in 0..self.width {
             let cell = self.text_buf[row_start + x];
-            crate::font::draw_char_psf(x * 8, self.cursor_y * unsafe { FONT_HEIGHT }, cell.ch, cell.color);
+            crate::font::draw_char_psf(
+                x * 8,
+                self.cursor_y * unsafe { FONT_HEIGHT },
+                cell.ch,
+                cell.color,
+            );
         }
     }
 

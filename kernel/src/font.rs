@@ -47,7 +47,9 @@ pub fn parse_psf(font: &'static [u8]) -> Option<Font<'static>> {
                 return None;
             }
 
-            unsafe { FONT_HEIGHT = hdr.height as usize; }
+            unsafe {
+                FONT_HEIGHT = hdr.height as usize;
+            }
 
             return Some(Font {
                 glyphs,
@@ -71,7 +73,9 @@ pub fn parse_psf(font: &'static [u8]) -> Option<Font<'static>> {
                 return None;
             }
 
-            unsafe { FONT_HEIGHT = bytes_per_glyph; }
+            unsafe {
+                FONT_HEIGHT = bytes_per_glyph;
+            }
 
             return Some(Font {
                 glyphs,
@@ -86,7 +90,7 @@ pub fn parse_psf(font: &'static [u8]) -> Option<Font<'static>> {
     None
 }
 
-pub fn draw_char_psf(x: usize, y: usize, ch: char, color: (u8,u8,u8,u8)) {
+pub fn draw_char_psf(x: usize, y: usize, ch: char, color: (u8, u8, u8, u8)) {
     let font = match parse_psf(FONT_DATA) {
         Some(f) => f,
         None => return,
@@ -105,9 +109,13 @@ pub fn draw_char_psf(x: usize, y: usize, ch: char, color: (u8,u8,u8,u8)) {
 
     let bpg = font.bytes_per_glyph;
     let start = glyph_index.checked_mul(bpg).unwrap_or(usize::MAX);
-    if start == usize::MAX { return; }
+    if start == usize::MAX {
+        return;
+    }
     let end = start + bpg;
-    if end > font.glyphs.len() { return; }
+    if end > font.glyphs.len() {
+        return;
+    }
     let glyph = &font.glyphs[start..end];
 
     let msb_left = true;
@@ -117,7 +125,9 @@ pub fn draw_char_psf(x: usize, y: usize, ch: char, color: (u8,u8,u8,u8)) {
         let row_byte_offset = (row * ((bits_in_row + 7) / 8)) as usize;
         for bit in 0..bits_in_row {
             let byte_idx = row_byte_offset + (bit / 8) as usize;
-            if byte_idx >= glyph.len() { break; }
+            if byte_idx >= glyph.len() {
+                break;
+            }
             let b = glyph[byte_idx];
             let bit_in_byte = bit % 8;
             let pixel_on = if msb_left {
@@ -127,7 +137,11 @@ pub fn draw_char_psf(x: usize, y: usize, ch: char, color: (u8,u8,u8,u8)) {
             };
             if pixel_on {
                 if let Some(fb) = crate::FRAMEBUFFER.lock().as_mut() {
-                    fb.put_pixel(x + bit as usize, y + row as usize, (color.0, color.1, color.2));
+                    fb.put_pixel(
+                        x + bit as usize,
+                        y + row as usize,
+                        (color.0, color.1, color.2),
+                    );
                 }
             }
         }

@@ -1,5 +1,5 @@
-use core::sync::atomic::{AtomicU64, Ordering};
 use crate::{error, gdt, hlt_loop, info, serial_print};
+use core::sync::atomic::{AtomicU64, Ordering};
 use lazy_static::lazy_static;
 use pic8259::ChainedPics;
 use spinning_top::Spinlock;
