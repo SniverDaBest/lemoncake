@@ -36,7 +36,13 @@ fn main() {
     }
 
     #[cfg(target_os = "linux")]
-    cmd.arg("-enable-kvm");
+    cmd.arg("-accel").arg("kvm");
+
+    #[cfg(target_os = "macos")]
+    cmd.arg("-accel").arg("hvf");
+
+    #[cfg(target_os = "windows")]
+    cmd.arg("-accel").arg("whpx");
 
     cmd.arg("-m").arg("4G");
     cmd.arg("-serial").arg("stdio");

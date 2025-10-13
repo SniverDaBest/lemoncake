@@ -44,13 +44,11 @@ use alloc::sync::Arc;
 use alloc::vec::Vec;
 use bootloader_api::config::{BootloaderConfig, Mapping};
 use bootloader_api::{BootInfo, entry_point};
-use commandline::run_command_line;
 use core::arch::asm;
 use core::error;
 use core::fmt::{Arguments, Write};
 use display::{Framebuffer, TTY};
 use elf::load_elf;
-use executor::{Executor, Task};
 use keyboard::ScancodeStream;
 use memory::BootInfoFrameAllocator;
 use spin::Mutex;
@@ -89,9 +87,11 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
         fb.clear_screen((30, 30, 46));
     }
 
+    println!("\x1b[0m{}", include_str!("../../assets/ascii_art.txt"));
+
     let pkg_ver = env!("CARGO_PKG_VERSION");
     info!(
-        "Running Lemoncake version {}m{}",
+        "Running Lemoncake version {}m{}. (c) 2025, SniverDaBest",
         pkg_ver.split(".").next().unwrap_or("?"),
         pkg_ver.split(".").nth(1).unwrap_or("?")
     );
@@ -115,15 +115,18 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     info!("Initializing heap...");
     allocator::init_heap(&mut mapper, &mut frame_allocator).expect("Unable to initialize heap!");
 
-    info!("Displaying logo...");
-    let w = if let Some(fb) = crate::FRAMEBUFFER.lock().as_mut() {
-        Some(fb.fb.info().width)
+    let res = if let Some(fb) = crate::FRAMEBUFFER.lock().as_mut() {
+        (fb.fb.info().width, fb.fb.info().height)
     } else {
-        None
+        panic!("Couldn't get resolution!");
     };
+
+    info!("Resolution: {}x{}", res.0, res.1);
+
+    info!("Displaying logo...");
     png::draw_png(
         include_bytes!("../../assets/logo.png"),
-        w.expect("Couldn't get width!") - 64,
+        res.0 - 64,
         0,
     );
 
@@ -259,10 +262,11 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
         jump_to_usermode(e.as_u64(), 0x7FFF_FFFF_E000);
     }
 
-    #[allow(unused)]
+    /*
     let mut e = Executor::new();
     e.spawn(Task::new(run_command_line(scancodes)));
     e.run();
+    */
 }
 
 pub fn map_user_stack(

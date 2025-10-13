@@ -34,10 +34,21 @@ You can check it out in Qemu, by just running `cargo run` in the root project di
 If you want, you could also use VirtualBox, VMWare, or maybe something else to emulate it, but it won't happen with `cargo run`, you'd need to manually do that yourself.
 
 >[!TIP]
-> If you're having issues with running QEMU, try removing the `--enable-kvm` flag from the command in the build script.
+> If you're having issues with running QEMU, try removing the acceleration flag in `src/main.rs`.
 
 # Contributions
 Contributions would by highly appreciated!
 
 # License
 Lemoncake uses the BSD 2-clause (simplified) license. Check `LICENSE` for the full license.
+
+# Credits
+Lemoncake uses quite a few dependencies. Most are under MIT, some are a dual license with either MIT or Apache 2.0.\
+\
+However, there are some things that I would like to credit that weren't libraries.
+* Spleen - fcambus/spleen on GitHub
+    * The font used in the TTY.
+    * Under MIT License.
+* Fomos' APIC code - Ruddle/Fomos on GitHub
+    * A lot of code for the APIC is borrowed from here.
+    * Under BSD 2-Clause (Simplified) License.

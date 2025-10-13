@@ -1,6 +1,7 @@
 use crate::FRAMEBUFFER;
 use bootloader_api::info::{FrameBuffer, PixelFormat};
 use core::fmt::{self, Write};
+use crate::font::FONT_HEIGHT;
 
 pub struct Framebuffer {
     pub fb: FrameBuffer,
@@ -192,7 +193,7 @@ impl TTY {
         }
 
         self.text_buf[y * self.width + x] = Cell { ch: c, color };
-        crate::font::draw_char(x * 8, y * 8, c, color);
+        crate::font::draw_char_psf(x * 8, y * unsafe { FONT_HEIGHT }, c, color);
     }
 
     pub fn get_char(&self, x: usize, y: usize) -> Option<char> {
@@ -204,7 +205,7 @@ impl TTY {
 
     pub fn clear_tty(&mut self) {
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-            fb.draw_rect(0, 0, self.width * 8, self.height * 8, (30, 30, 46));
+            fb.draw_rect(0, 0, self.width * 8, self.height * unsafe { FONT_HEIGHT }, (30, 30, 46));
         }
 
         for i in 0..self.text_buf.len() {
@@ -232,14 +233,14 @@ impl TTY {
         }
 
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-            fb.draw_rect(0, 0, self.width * 8, self.height * 8, (30, 30, 46));
+            fb.draw_rect(0, 0, self.width * 8, self.height * unsafe { FONT_HEIGHT }, (30, 30, 46));
         }
 
         for y in 0..self.height {
             for x in 0..self.width {
                 let cell = self.text_buf[y * self.width + x];
                 if cell.ch != '\x00' {
-                    crate::font::draw_char(x * 8, y * 8, cell.ch, cell.color);
+                    crate::font::draw_char_psf(x * 8, y * unsafe { FONT_HEIGHT }, cell.ch, cell.color);
                 }
             }
         }
@@ -283,12 +284,12 @@ impl TTY {
         }
 
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-            fb.draw_rect(0, self.cursor_y * 8, self.width * 8, 8, (30, 30, 46));
+            fb.draw_rect(0, self.cursor_y * unsafe { FONT_HEIGHT }, self.width * 8, 8, (30, 30, 46));
         }
 
         for x in 0..self.width {
             let cell = self.text_buf[row_start + x];
-            crate::font::draw_char(x * 8, self.cursor_y * 8, cell.ch, cell.color);
+            crate::font::draw_char_psf(x * 8, self.cursor_y * unsafe { FONT_HEIGHT }, cell.ch, cell.color);
         }
     }
 
@@ -362,7 +363,7 @@ impl TTY {
     }
 
     pub fn get_cur_loc(&mut self) -> (usize, usize) {
-        return (self.cursor_x * 8, self.cursor_y * 8);
+        return (self.cursor_x * 8, self.cursor_y * unsafe { FONT_HEIGHT });
     }
 
     pub fn yay(&mut self, color: Option<(u8, u8, u8, u8)>) {

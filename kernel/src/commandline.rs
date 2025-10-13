@@ -105,14 +105,14 @@ impl CommandRegistry {
 
 fn license(_registry: &CommandRegistry, _args: Vec<&str>) -> i32 {
     println!(
-        "Lemoncake is licensed under the 2-Clause (simplified) BSD License\n(c) SniverDaBest 2025"
+        "Lemoncake is licensed under the 2-Clause (simplified) BSD License\n(c) SniverDaBest 2025\n\nSpleen (the font used) is also licensed under the 2-Clause (simplified) BSD License."
     );
     return 0;
 }
 
 fn credits(_registry: &CommandRegistry, _args: Vec<&str>) -> i32 {
     println!(
-        "Lemoncake is developed by SniverDaBest, and uses some external crates/libraries, most of which are developed by the Rust OSDev community.\nIt also uses some code from Ruddle/Fomos on GitHub for the APIC and IOAPIC."
+        "Lemoncake is developed by SniverDaBest, and uses some external crates/libraries, most of which are developed by the Rust OSDev community.\nIt uses some code from Ruddle/Fomos on GitHub for the APIC and IOAPIC.\nThe font used be default is called \"Spleen\", and can be found at fcambus/spleen on GitHub."
     );
     return 0;
 }
