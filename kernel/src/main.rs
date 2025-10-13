@@ -41,16 +41,24 @@ pub mod sleep;
 pub mod syscall;
 
 use acpi::init_pcie_from_acpi;
+use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use bootloader_api::config::{BootloaderConfig, Mapping};
-use bootloader_api::{BootInfo, entry_point};
+use x86_64::structures::paging::PageSize;
 use core::arch::asm;
 use core::error;
 use core::fmt::{Arguments, Write};
 use display::{Framebuffer, TTY};
 use elf::load_elf;
 use keyboard::ScancodeStream;
+use limine::request::StackSizeRequest;
+use limine::{
+    BaseRevision,
+    request::{
+        FramebufferRequest, HhdmRequest, MemoryMapRequest, RequestsEndMarker, RequestsStartMarker,
+        RsdpRequest,
+    },
+};
 use memory::BootInfoFrameAllocator;
 use spin::Mutex;
 use spinning_top::Spinlock;
@@ -60,25 +68,58 @@ use x86_64::{
     structures::paging::{FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB},
 };
 
-pub static BOOTLOADER_CONFIG: BootloaderConfig = {
-    let mut config = BootloaderConfig::new_default();
-    config.mappings.physical_memory = Some(Mapping::Dynamic);
-    config
-};
-
 pub static mut PMO: u64 = 0;
 pub const HANDLER: acpi::Handler = acpi::Handler;
-
-entry_point!(kernel_main, config = &BOOTLOADER_CONFIG);
 
 pub static FRAMEBUFFER: Spinlock<Option<Framebuffer>> = Spinlock::new(None);
 pub static TTY: Spinlock<Option<TTY>> = Spinlock::new(None);
 
-fn kernel_main(info: &'static mut BootInfo) -> ! {
+#[used]
+#[unsafe(link_section = ".requests")]
+static BASE_REVISION: BaseRevision = BaseRevision::new();
+
+#[used]
+#[unsafe(link_section = ".requests")]
+static FRAMEBUFFER_REQUEST: FramebufferRequest = FramebufferRequest::new();
+
+#[used]
+#[unsafe(link_section = ".requests")]
+static HHDM_REQUEST: HhdmRequest = HhdmRequest::new();
+
+#[used]
+#[unsafe(link_section = ".requests")]
+static MEMMAP_REQUEST: MemoryMapRequest = MemoryMapRequest::new();
+
+#[used]
+#[unsafe(link_section = ".requests")]
+static RSDP_REQUEST: RsdpRequest = RsdpRequest::new();
+
+#[used]
+#[unsafe(link_section = ".requests")]
+static STACK_SIZE_REQUEST: StackSizeRequest = StackSizeRequest::new().with_size(0x100000);
+
+#[used]
+#[unsafe(link_section = ".requests_start_marker")]
+static _START_MARKER: RequestsStartMarker = RequestsStartMarker::new();
+#[used]
+#[unsafe(link_section = ".requests_end_marker")]
+static _END_MARKER: RequestsEndMarker = RequestsEndMarker::new();
+
+#[unsafe(no_mangle)]
+pub extern "C" fn kernel_main() -> ! {
     serial_print!("\x1B[2J\x1B[1;1H");
 
-    let blfb = info.framebuffer.take().expect("No framebuffer found!");
-    let fb = Framebuffer::new(blfb);
+    if !BASE_REVISION.is_supported() {
+        panic!("Limine base revisision is NOT SUPPORTED!");
+    }
+
+    let lfb = FRAMEBUFFER_REQUEST
+        .get_response()
+        .expect("Unable to get framebuffer request's response!")
+        .framebuffers()
+        .next()
+        .expect("Unable to get first framebuffer!");
+    let fb = Framebuffer::new(lfb);
     *FRAMEBUFFER.lock() = Some(fb);
     *TTY.lock() = Some(TTY::new());
 
@@ -97,25 +138,30 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
 
     warning!("This is a hobby project. Don't expect it to be stable, secure, or even work.");
 
-    let pmo = info
-        .physical_memory_offset
-        .into_option()
-        .expect("No physical memory offset found!");
-    unsafe {
-        PMO = pmo;
-    }
+    let pmo = HHDM_REQUEST
+        .get_response()
+        .expect("Unable to get HHDM request's response!")
+        .offset();
+    unsafe { PMO = pmo }
 
     info!("Physical memory offset: {:#X}", pmo);
 
     info!("Getting mapping & frame allocator...");
     let mut mapper = unsafe { memory::init(VirtAddr::new(PMO)) };
-    let mut frame_allocator = unsafe { BootInfoFrameAllocator::init(&info.memory_regions) };
+    let mut frame_allocator = unsafe {
+        BootInfoFrameAllocator::init(
+            MEMMAP_REQUEST
+                .get_response()
+                .expect("Unable to get memory map request's response!")
+                .entries(),
+        )
+    };
 
     info!("Initializing heap...");
     allocator::init_heap(&mut mapper, &mut frame_allocator).expect("Unable to initialize heap!");
 
     let res = if let Some(fb) = crate::FRAMEBUFFER.lock().as_mut() {
-        (fb.fb.info().width, fb.fb.info().height)
+        fb.resolution()
     } else {
         panic!("Couldn't get resolution!");
     };
@@ -125,13 +171,33 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     info!("Displaying logo...");
     png::draw_png(include_bytes!("../../assets/logo.png"), res.0 - 64, 0);
 
+    info!("Mapping RSDP...");
+    let pages = Page::range_inclusive(
+        Page::containing_address(VirtAddr::new(RSDP_REQUEST.get_response().expect("Unable to get the RSDP address!").address() as u64 + pmo)),
+        Page::containing_address(VirtAddr::new(RSDP_REQUEST.get_response().expect("Unable to get the RSDP address!").address() as u64 + pmo + Size4KiB::SIZE * 10)),
+    );
+
+    for page in pages {
+        unsafe {
+            mapper
+                .map_to(
+                    page,
+                    frame_allocator
+                        .allocate_frame()
+                        .expect("Unable to allocate frame for RSDP!"),
+                    PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
+                    &mut frame_allocator,
+                )
+                .expect("Unable to map to RSDP!")
+                .flush();
+        }
+    }
+
     info!("Getting ACPI information...");
     let tables = unsafe {
         ::acpi::AcpiTables::from_rsdp(
             HANDLER,
-            info.rsdp_addr
-                .into_option()
-                .expect("Unable to get the RSDP address!") as usize,
+            RSDP_REQUEST.get_response().expect("Unable to get the RSDP address!").address(),
         )
         .expect("Unable to get ACPI tables from the RSDP!")
     };

@@ -2,3 +2,8 @@
 *.img
 *.o
 init
+/limine
+/ovmf
+*.iso
+kernel/kernel
+kernel/target

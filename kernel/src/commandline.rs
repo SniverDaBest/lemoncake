@@ -175,7 +175,7 @@ fn panic_(_registry: &CommandRegistry, _args: Vec<&str>) -> i32 {
 
 fn res(_registry: &CommandRegistry, _args: Vec<&str>) -> i32 {
     let sz = if let Some(fb) = crate::FRAMEBUFFER.lock().as_mut() {
-        (fb.fb.info().width, fb.fb.info().height)
+        fb.resolution()
     } else {
         println!("Unable to get the framebuffer!");
         return 1;

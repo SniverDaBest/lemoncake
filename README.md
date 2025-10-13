@@ -10,6 +10,9 @@ It's written in Rust, with a chance some code in other languages may be written 
 \
 Here's a picture of it running:
 ![](https://github.com/user-attachments/assets/931f4e19-421a-4f88-b083-c0b8c6cb7fd6)
+<sup>
+Note: The images may not be up to date!
+</sup>
 
 >[!TIP]
 > If you're having issues, try running the utility script.\

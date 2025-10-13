@@ -1,63 +1,106 @@
 use crate::FRAMEBUFFER;
 use crate::font::FONT_HEIGHT;
-use bootloader_api::info::{FrameBuffer, PixelFormat};
 use core::fmt::{self, Write};
 
 pub struct Framebuffer {
-    pub fb: FrameBuffer,
+    pub fb: ::limine::framebuffer::Framebuffer<'static>,
+}
+
+enum PixelFormat {
+    Rgb,
+    Bgr,
+    Unknown,
 }
 
 impl Framebuffer {
-    pub fn new(fb: FrameBuffer) -> Self {
-        Framebuffer { fb }
+    pub fn new(fb: ::limine::framebuffer::Framebuffer<'static>) -> Self {
+        return Framebuffer { fb };
     }
 
     pub fn put_pixel(&mut self, x: usize, y: usize, color: (u8, u8, u8)) {
-        if x >= self.fb.info().width || y >= self.fb.info().height {
+        if x >= self.fb.width() as usize as usize || y >= self.fb.height() as usize as usize {
             return;
         }
 
-        let pixel_index = y * self.fb.info().stride + x;
-        let byte_offset = pixel_index * self.fb.info().bytes_per_pixel;
+        let byte_offset = y * self.fb.pitch() as usize + x * self.fb.bpp() as usize / 8;
 
-        match self.fb.info().pixel_format {
-            PixelFormat::Rgb => {
-                self.fb.buffer_mut()[byte_offset] = color.0;
-                self.fb.buffer_mut()[byte_offset + 1] = color.1;
-                self.fb.buffer_mut()[byte_offset + 2] = color.2;
+        unsafe {
+            match self.get_pixel_format() {
+                PixelFormat::Rgb => {
+                    *self.fb.addr().add(byte_offset) = color.0;
+                    *self.fb.addr().add(byte_offset + 1) = color.0;
+                    *self.fb.addr().add(byte_offset + 2) = color.0;
+                }
+                PixelFormat::Bgr => {
+                    *self.fb.addr().add(byte_offset) = color.2;
+                    *self.fb.addr().add(byte_offset + 1) = color.1;
+                    *self.fb.addr().add(byte_offset + 2) = color.0;
+                }
+                _ => {}
             }
-            PixelFormat::Bgr => {
-                self.fb.buffer_mut()[byte_offset] = color.2;
-                self.fb.buffer_mut()[byte_offset + 1] = color.1;
-                self.fb.buffer_mut()[byte_offset + 2] = color.0;
-            }
-            PixelFormat::U8 => {
-                self.fb.buffer_mut()[byte_offset] = color.0;
-            }
-            _ => {}
+        }
+    }
+
+    fn get_pixel_format(&self) -> PixelFormat {
+        let rs = self.fb.red_mask_shift();
+        let gs = self.fb.green_mask_shift();
+        let bs = self.fb.blue_mask_shift();
+
+        if rs < gs && gs < bs {
+            return PixelFormat::Rgb;
+        } else if bs < gs && gs < rs {
+            return PixelFormat::Bgr;
+        } else {
+            return PixelFormat::Unknown;
         }
     }
 
     pub fn clear_screen(&mut self, color: (u8, u8, u8)) {
-        for y in 0..self.fb.info().height {
-            for x in 0..self.fb.info().width {
-                self.put_pixel(x, y, color);
+        let pixel: u32 = match self.get_pixel_format() {
+            PixelFormat::Rgb => {
+                ((color.0 as u32) << 0) | ((color.1 as u32) << 8) | ((color.2 as u32) << 16)
+            }
+            PixelFormat::Bgr => {
+                ((color.2 as u32) << 0) | ((color.1 as u32) << 8) | ((color.0 as u32) << 16)
+            }
+            _ => 0,
+        };
+
+        unsafe {
+            let fb_ptr = self.fb.addr() as *mut u8;
+
+            for y in 0..self.fb.height() as usize {
+                let row_ptr = fb_ptr.add(y * self.fb.pitch() as usize) as *mut u32;
+                for x in 0..self.fb.width() as usize {
+                    *row_ptr.add(x) = pixel;
+                }
             }
         }
     }
 
     pub fn draw_rect(&mut self, x: usize, y: usize, w: usize, h: usize, color: (u8, u8, u8)) {
-        if x >= self.fb.info().width
-            || y >= self.fb.info().height
-            || x + w >= self.fb.info().width
-            || y + h >= self.fb.info().height
-        {
+        if x >= self.fb.width() as usize || y >= self.fb.height() as usize {
             return;
         }
 
-        for x in x..x + w {
-            for y in y..y + h {
-                self.put_pixel(x, y, color);
+        let pixel: u32 = match self.get_pixel_format() {
+            PixelFormat::Rgb => {
+                ((color.0 as u32) << 0) | ((color.1 as u32) << 8) | ((color.2 as u32) << 16)
+            }
+            PixelFormat::Bgr => {
+                ((color.2 as u32) << 0) | ((color.1 as u32) << 8) | ((color.0 as u32) << 16)
+            }
+            _ => 0,
+        };
+
+        unsafe {
+            let fb_ptr = self.fb.addr() as *mut u8;
+
+            for row in y..(y + h).min(self.fb.height() as usize) {
+                let row_ptr = fb_ptr.add(row * self.fb.pitch() as usize) as *mut u32;
+                for col in x..(x + w).min(self.fb.width() as usize) {
+                    *row_ptr.add(col) = pixel;
+                }
             }
         }
     }
@@ -70,7 +113,7 @@ impl Framebuffer {
         x: usize,
         y: usize,
     ) {
-        if x + width > self.fb.info().width || y + height > self.fb.info().height {
+        if x + width > self.fb.width() as usize || y + height > self.fb.height() as usize {
             return;
         }
 
@@ -130,7 +173,7 @@ impl Framebuffer {
     }
 
     pub fn resolution(&self) -> (usize, usize) {
-        return (self.fb.info().width, self.fb.info().height);
+        return (self.fb.width() as usize, self.fb.height() as usize);
     }
 }
 
