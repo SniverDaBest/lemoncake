@@ -1,3 +1,6 @@
+>[!IMPORTANT]
+> This is the `limine` branch. I'm working on changing the kernel's bootloader to Limine.
+
 [![](https://tokei.rs/b1/github/SniverDaBest/lemoncake)](https://github.com/SniverDaBest/lemoncake)
 [![](https://img.shields.io/github/actions/workflow/status/SniverDaBest/lemoncake/rust.yml?style=plastic&color=fish)](https://github.com/SniverDaBest/lemoncake/actions/)
 [![](https://img.shields.io/github/languages/top/SniverDaBest/lemoncake?style=plastic&color=%23ef5124)](https://github.com/SniverDaBest/lemoncake)

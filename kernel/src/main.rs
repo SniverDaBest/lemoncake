@@ -10,11 +10,11 @@
 )]
 
 /* TODO:
+ * A better bootloader (Limine) <- worked on in this branch!
  * VirtIO Drivers
  * IDE
  * Shutting down the system through ACPI
  * Different fonts
- * A better bootloader (Limine)
  * A C/C++ library (like glibc or musl)
  * Support external drivers
  */
@@ -41,10 +41,8 @@ pub mod sleep;
 pub mod syscall;
 
 use acpi::init_pcie_from_acpi;
-use alloc::string::String;
 use alloc::sync::Arc;
 use alloc::vec::Vec;
-use x86_64::structures::paging::PageSize;
 use core::arch::asm;
 use core::error;
 use core::fmt::{Arguments, Write};
@@ -63,6 +61,7 @@ use memory::BootInfoFrameAllocator;
 use spin::Mutex;
 use spinning_top::Spinlock;
 use syscall::jump_to_usermode;
+use x86_64::structures::paging::PageSize;
 use x86_64::{
     PhysAddr, VirtAddr,
     structures::paging::{FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB},
@@ -171,33 +170,14 @@ pub extern "C" fn kernel_main() -> ! {
     info!("Displaying logo...");
     png::draw_png(include_bytes!("../../assets/logo.png"), res.0 - 64, 0);
 
-    info!("Mapping RSDP...");
-    let pages = Page::range_inclusive(
-        Page::containing_address(VirtAddr::new(RSDP_REQUEST.get_response().expect("Unable to get the RSDP address!").address() as u64 + pmo)),
-        Page::containing_address(VirtAddr::new(RSDP_REQUEST.get_response().expect("Unable to get the RSDP address!").address() as u64 + pmo + Size4KiB::SIZE * 10)),
-    );
-
-    for page in pages {
-        unsafe {
-            mapper
-                .map_to(
-                    page,
-                    frame_allocator
-                        .allocate_frame()
-                        .expect("Unable to allocate frame for RSDP!"),
-                    PageTableFlags::PRESENT | PageTableFlags::WRITABLE,
-                    &mut frame_allocator,
-                )
-                .expect("Unable to map to RSDP!")
-                .flush();
-        }
-    }
-
     info!("Getting ACPI information...");
     let tables = unsafe {
         ::acpi::AcpiTables::from_rsdp(
             HANDLER,
-            RSDP_REQUEST.get_response().expect("Unable to get the RSDP address!").address(),
+            RSDP_REQUEST
+                .get_response()
+                .expect("Unable to get the RSDP address!")
+                .address(),
         )
         .expect("Unable to get ACPI tables from the RSDP!")
     };
