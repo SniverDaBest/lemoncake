@@ -1,5 +1,4 @@
-use crate::font::FONT_HEIGHT;
-use crate::FRAMEBUFFER;
+use crate::{FRAMEBUFFER, font::FONT_HEIGHT};
 use bootloader_api::info::{FrameBuffer, PixelFormat};
 use core::fmt::{self, Write};
 
@@ -41,14 +40,14 @@ impl Framebuffer {
     pub fn clear_screen(&mut self, color: (u8, u8, u8)) {
         let width = self.fb.info().width;
         let height = self.fb.info().height;
-        
+
         match self.fb.info().pixel_format {
             PixelFormat::Rgb => {
                 for y in 0..height {
                     for x in 0..width {
                         let pixel_index = y * self.fb.info().stride + x;
                         let byte_offset = pixel_index * self.fb.info().bytes_per_pixel;
-                        
+
                         self.fb.buffer_mut()[byte_offset] = color.0;
                         self.fb.buffer_mut()[byte_offset + 1] = color.1;
                         self.fb.buffer_mut()[byte_offset + 2] = color.2;
@@ -60,7 +59,7 @@ impl Framebuffer {
                     for x in 0..width {
                         let pixel_index = y * self.fb.info().stride + x;
                         let byte_offset = pixel_index * self.fb.info().bytes_per_pixel;
-                        
+
                         self.fb.buffer_mut()[byte_offset] = color.2;
                         self.fb.buffer_mut()[byte_offset + 1] = color.1;
                         self.fb.buffer_mut()[byte_offset + 2] = color.0;
@@ -72,7 +71,7 @@ impl Framebuffer {
                     for x in 0..width {
                         let pixel_index = y * self.fb.info().stride + x;
                         let byte_offset = pixel_index * self.fb.info().bytes_per_pixel;
-                        
+
                         self.fb.buffer_mut()[byte_offset] = (color.0 + color.1 + color.2) / 3;
                     }
                 }
@@ -82,10 +81,7 @@ impl Framebuffer {
     }
 
     pub fn draw_rect(&mut self, x: usize, y: usize, w: usize, h: usize, color: (u8, u8, u8)) {
-        if x >= self.fb.info().width || 
-        y >= self.fb.info().height ||
-        x + w <= x ||
-        y + h <= y {
+        if x >= self.fb.info().width || y >= self.fb.info().height || x + w <= x || y + h <= y {
             return;
         }
 
@@ -96,7 +92,7 @@ impl Framebuffer {
             PixelFormat::Rgb => {
                 for line_y in y..(y + h) {
                     let start_idx = (line_y * self.fb.info().stride + x) * 3;
-                    
+
                     for i in 0..w {
                         self.fb.buffer_mut()[start_idx + i * 3] = color.0;
                         self.fb.buffer_mut()[start_idx + i * 3 + 1] = color.1;
@@ -107,7 +103,7 @@ impl Framebuffer {
             PixelFormat::Bgr => {
                 for line_y in y..(y + h) {
                     let start_idx = (line_y * self.fb.info().stride + x) * 3;
-                    
+
                     for i in 0..w {
                         self.fb.buffer_mut()[start_idx + i * 3] = color.2;
                         self.fb.buffer_mut()[start_idx + i * 3 + 1] = color.1;
@@ -119,7 +115,7 @@ impl Framebuffer {
                 let gray = (color.0 + color.1 + color.2) / 3;
                 for line_y in y..(y + h) {
                     let start_idx = line_y * self.fb.info().stride + x;
-                    
+
                     for i in 0..w {
                         self.fb.buffer_mut()[start_idx + i] = gray;
                     }

@@ -10,6 +10,7 @@
 )]
 
 /* TODO:
+ * A not shitty executable loader
  * VirtIO Drivers
  * IDE
  * Shutting down the system through ACPI
@@ -159,7 +160,6 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
 
     info!("Setting up PICS/APIC");
     if let ::acpi::InterruptModel::Apic(apic) = pi.interrupt_model {
-        info!("Using APIC!");
         let lapic = unsafe { apic::LocalApic::init(PhysAddr::new(apic.local_apic_address)) };
         let mut freq = 1_000_000;
         if let Some(cpuid) = apic::cpuid()
@@ -190,6 +190,10 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
 
     info!("Enabling interrupts...");
     x86_64::instructions::interrupts::enable();
+
+    info!("Initializing scancode queue...");
+    #[allow(unused)]
+    let scancodes = Arc::new(Mutex::new(ScancodeStream::new()));
 
     info!("Finding IDE devices...");
     let mut ide_devs = Vec::new();
@@ -228,10 +232,6 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
 
     info!("Found {} IDE devices!", ide_devs.len());
 
-    info!("Initializing scancode queue...");
-    #[allow(unused)]
-    let scancodes = Arc::new(Mutex::new(ScancodeStream::new()));
-
     if !ide_devs.is_empty() {
         info!("Initializing IDE devices...");
         for d in ide_devs {
@@ -256,12 +256,6 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     unsafe {
         jump_to_usermode(e.as_u64(), 0x7FFF_FFFF_E000);
     }
-
-    /*
-    let mut e = Executor::new();
-    e.spawn(Task::new(run_command_line(scancodes)));
-    e.run();
-    */
 }
 
 pub fn map_user_stack(
