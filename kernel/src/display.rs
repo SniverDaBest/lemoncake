@@ -1,5 +1,5 @@
-use crate::FRAMEBUFFER;
 use crate::font::FONT_HEIGHT;
+use crate::FRAMEBUFFER;
 use bootloader_api::info::{FrameBuffer, PixelFormat};
 use core::fmt::{self, Write};
 
@@ -39,26 +39,93 @@ impl Framebuffer {
     }
 
     pub fn clear_screen(&mut self, color: (u8, u8, u8)) {
-        for y in 0..self.fb.info().height {
-            for x in 0..self.fb.info().width {
-                self.put_pixel(x, y, color);
+        let width = self.fb.info().width;
+        let height = self.fb.info().height;
+        
+        match self.fb.info().pixel_format {
+            PixelFormat::Rgb => {
+                for y in 0..height {
+                    for x in 0..width {
+                        let pixel_index = y * self.fb.info().stride + x;
+                        let byte_offset = pixel_index * self.fb.info().bytes_per_pixel;
+                        
+                        self.fb.buffer_mut()[byte_offset] = color.0;
+                        self.fb.buffer_mut()[byte_offset + 1] = color.1;
+                        self.fb.buffer_mut()[byte_offset + 2] = color.2;
+                    }
+                }
             }
+            PixelFormat::Bgr => {
+                for y in 0..height {
+                    for x in 0..width {
+                        let pixel_index = y * self.fb.info().stride + x;
+                        let byte_offset = pixel_index * self.fb.info().bytes_per_pixel;
+                        
+                        self.fb.buffer_mut()[byte_offset] = color.2;
+                        self.fb.buffer_mut()[byte_offset + 1] = color.1;
+                        self.fb.buffer_mut()[byte_offset + 2] = color.0;
+                    }
+                }
+            }
+            PixelFormat::U8 => {
+                for y in 0..height {
+                    for x in 0..width {
+                        let pixel_index = y * self.fb.info().stride + x;
+                        let byte_offset = pixel_index * self.fb.info().bytes_per_pixel;
+                        
+                        self.fb.buffer_mut()[byte_offset] = (color.0 + color.1 + color.2) / 3;
+                    }
+                }
+            }
+            _ => {}
         }
     }
 
     pub fn draw_rect(&mut self, x: usize, y: usize, w: usize, h: usize, color: (u8, u8, u8)) {
-        if x >= self.fb.info().width
-            || y >= self.fb.info().height
-            || x + w >= self.fb.info().width
-            || y + h >= self.fb.info().height
-        {
+        if x >= self.fb.info().width || 
+        y >= self.fb.info().height ||
+        x + w <= x ||
+        y + h <= y {
             return;
         }
 
-        for x in x..x + w {
-            for y in y..y + h {
-                self.put_pixel(x, y, color);
+        let x = x.min(self.fb.info().width - w);
+        let y = y.min(self.fb.info().height - h);
+
+        match self.fb.info().pixel_format {
+            PixelFormat::Rgb => {
+                for line_y in y..(y + h) {
+                    let start_idx = (line_y * self.fb.info().stride + x) * 3;
+                    
+                    for i in 0..w {
+                        self.fb.buffer_mut()[start_idx + i * 3] = color.0;
+                        self.fb.buffer_mut()[start_idx + i * 3 + 1] = color.1;
+                        self.fb.buffer_mut()[start_idx + i * 3 + 2] = color.2;
+                    }
+                }
             }
+            PixelFormat::Bgr => {
+                for line_y in y..(y + h) {
+                    let start_idx = (line_y * self.fb.info().stride + x) * 3;
+                    
+                    for i in 0..w {
+                        self.fb.buffer_mut()[start_idx + i * 3] = color.2;
+                        self.fb.buffer_mut()[start_idx + i * 3 + 1] = color.1;
+                        self.fb.buffer_mut()[start_idx + i * 3 + 2] = color.0;
+                    }
+                }
+            }
+            PixelFormat::U8 => {
+                let gray = (color.0 + color.1 + color.2) / 3;
+                for line_y in y..(y + h) {
+                    let start_idx = line_y * self.fb.info().stride + x;
+                    
+                    for i in 0..w {
+                        self.fb.buffer_mut()[start_idx + i] = gray;
+                    }
+                }
+            }
+            _ => {}
         }
     }
 
@@ -70,15 +137,24 @@ impl Framebuffer {
         x: usize,
         y: usize,
     ) {
-        if x + width > self.fb.info().width || y + height > self.fb.info().height {
+        let info = self.fb.info();
+        let w = info.width;
+        let h = info.height;
+
+        let mw = w.saturating_sub(x).min(width);
+        let mh = h.saturating_sub(y).min(height);
+
+        if mw == 0 || mh == 0 {
             return;
         }
 
-        for row in 0..height {
-            for col in 0..width {
-                let pixel_index = row * width + col;
-                if pixel_index < bitmap.len() {
-                    let (r, g, b, a) = bitmap[pixel_index];
+        let row_sd = width;
+
+        for row in 0..mh {
+            let base_index = row * row_sd;
+            for col in 0..mw {
+                let pixel_index = base_index + col;
+                if let Some(&(r, g, b, a)) = bitmap.get(pixel_index) {
                     if a != 0 {
                         self.put_pixel(x + col, y + row, (r, g, b));
                     }
@@ -205,13 +281,7 @@ impl TTY {
 
     pub fn clear_tty(&mut self) {
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-            fb.draw_rect(
-                0,
-                0,
-                self.width * 8,
-                self.height * unsafe { FONT_HEIGHT },
-                (30, 30, 46),
-            );
+            fb.clear_screen((30, 30, 46));
         }
 
         for i in 0..self.text_buf.len() {
@@ -239,13 +309,7 @@ impl TTY {
         }
 
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-            fb.draw_rect(
-                0,
-                0,
-                self.width * 8,
-                self.height * unsafe { FONT_HEIGHT },
-                (30, 30, 46),
-            );
+            fb.clear_screen((30, 30, 46));
         }
 
         for y in 0..self.height {
@@ -301,13 +365,7 @@ impl TTY {
         }
 
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-            fb.draw_rect(
-                0,
-                self.cursor_y * unsafe { FONT_HEIGHT },
-                self.width * 8,
-                8,
-                (30, 30, 46),
-            );
+            fb.clear_screen((30, 30, 46));
         }
 
         for x in 0..self.width {
