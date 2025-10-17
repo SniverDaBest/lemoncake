@@ -1,4 +1,4 @@
-use crate::{error, info, nftodo, print, rdrand, sleep::Sleep, warning};
+use crate::{error, info, nftodo, print, rdrand, sad, sleep::Sleep, warning, yay};
 use alloc::format;
 use core::{
     arch::{asm, naked_asm},
@@ -86,6 +86,17 @@ pub unsafe fn syscall_handler(
 
             return to_write;
         }
+        6 => match rdi {
+            1 => {
+                yay!();
+                return 0;
+            }
+            2 => {
+                sad!();
+                return 0;
+            }
+            _ => return usize::MAX,
+        },
         i => {
             error!("(SYSCALL) Invalid syscall number {}!", i);
             return usize::MAX;
@@ -95,7 +106,6 @@ pub unsafe fn syscall_handler(
 
 pub unsafe fn jump_to_usermode(entry: u64, user_stack_top: u64) -> ! {
     asm!(
-        "cli",
         "mov ax, 0x23",
         "mov ds, ax",
         "mov es, ax",

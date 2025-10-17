@@ -1,11 +1,11 @@
-use crate::error;
+use core::slice;
+
+use crate::{allocator::alloc_user, error, info};
 use goblin::elf::program_header::PT_LOAD;
 use x86_64::{
     VirtAddr,
-    structures::paging::{FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB},
+    structures::paging::{FrameAllocator, Mapper, Size4KiB},
 };
-
-const USER_BASE: u64 = 0x0000_6000_0000;
 
 pub fn load_elf(
     bytes: &[u8],
@@ -20,70 +20,48 @@ pub fn load_elf(
         }
     };
 
+    let mut req_sz = 0u64;
+
+    for phdr in &elf.program_headers {
+        if phdr.p_type != PT_LOAD {
+            continue;
+        }
+        if req_sz < phdr.p_vaddr {
+            req_sz += phdr.p_vaddr;
+        }
+        req_sz += phdr.p_memsz;
+    }
+
+    let user_base = match alloc_user(mapper, frame_allocator, req_sz as usize) {
+        Some(a) => {
+            info!("(ELF) Allocated {} bytes for executable!", req_sz);
+            a.as_u64()
+        }
+        None => {
+            error!("(ELF) Unable to allocate {} bytes for executable!", req_sz);
+            return None;
+        }
+    };
+
     for phdr in &elf.program_headers {
         if phdr.p_type != PT_LOAD {
             continue;
         }
 
-        let seg_start = phdr.p_vaddr + USER_BASE;
-        let seg_end = seg_start + phdr.p_memsz;
+        let dst = unsafe {
+            slice::from_raw_parts_mut((user_base + phdr.p_vaddr) as *mut u8, phdr.p_memsz as usize)
+        };
 
-        let start_page = Page::containing_address(VirtAddr::new(seg_start));
-        let end_page = Page::containing_address(VirtAddr::new(seg_end - 1));
+        let file_range = phdr.p_offset as usize..(phdr.p_offset + phdr.p_filesz) as usize;
+        let src = &bytes[file_range];
 
-        let mut flags = PageTableFlags::PRESENT | PageTableFlags::USER_ACCESSIBLE;
-        if !phdr.is_executable() {
-            flags |= PageTableFlags::NO_EXECUTE;
-        }
-        if phdr.is_write() {
-            flags |= PageTableFlags::WRITABLE;
-        }
+        let copy_len = src.len().min(dst.len());
 
-        for page in Page::range_inclusive(start_page, end_page) {
-            let frame = frame_allocator
-                .allocate_frame()
-                .expect("(ELF) Could not allocate frame");
-
-            unsafe {
-                mapper
-                    .map_to(
-                        page,
-                        frame,
-                        flags | PageTableFlags::WRITABLE,
-                        frame_allocator,
-                    )
-                    .expect("(ELF) Unable to map page")
-                    .flush();
-            }
-
-            let virt_addr = page.start_address().as_u64() as *mut u8;
-            let dst = unsafe { core::slice::from_raw_parts_mut(virt_addr, 4096) };
-
-            let page_offset = page.start_address().as_u64() as usize - seg_start as usize;
-
-            let file_start = phdr.p_offset as usize + page_offset;
-            let file_end = (file_start + 4096).min(phdr.p_offset as usize + phdr.p_filesz as usize);
-
-            if file_start < file_end && file_start < bytes.len() {
-                let copy_len = file_end - file_start;
-                dst[..copy_len].copy_from_slice(&bytes[file_start..file_end]);
-                if copy_len < 4096 {
-                    dst[copy_len..].fill(0);
-                }
-            } else {
-                dst.fill(0);
-            }
-
-            if !phdr.is_write() {
-                unsafe {
-                    mapper
-                        .update_flags(page, flags)
-                        .expect("(ELF) Unable to update flags")
-                        .flush();
-                }
-            }
+        dst[..copy_len].copy_from_slice(&src[..copy_len]);
+        if copy_len < dst.len() {
+            dst[copy_len..].fill(0);
         }
     }
 
-    return Some(VirtAddr::new(elf.entry + USER_BASE));
+    return Some(VirtAddr::new(elf.entry + user_base));
 }

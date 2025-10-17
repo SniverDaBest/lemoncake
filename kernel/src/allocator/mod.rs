@@ -111,6 +111,35 @@ pub fn alloc_pages(
     Some(VirtAddr::new(base))
 }
 
+pub fn alloc_pages_user(
+    mapper: &mut impl Mapper<Size4KiB>,
+    frame_allocator: &mut impl FrameAllocator<Size4KiB>,
+    num_pages: usize,
+) -> Option<VirtAddr> {
+    static mut NEXT_VIRT: u64 = 0xffff_9000_0000_0000;
+    let base;
+    unsafe {
+        base = NEXT_VIRT;
+        NEXT_VIRT += (num_pages as u64) * 4096;
+    }
+
+    for i in 0..num_pages {
+        let virt = VirtAddr::new(base + (i as u64) * 4096);
+        let phys = frame_allocator
+            .allocate_frame()
+            .expect("(ALLOCATOR) Unable to allocate a frame!");
+        let flags =
+            PageTableFlags::PRESENT | PageTableFlags::WRITABLE | PageTableFlags::USER_ACCESSIBLE;
+        unsafe {
+            mapper
+                .map_to(Page::containing_address(virt), phys, flags, frame_allocator)
+                .expect("(ALLOCATOR) Unable to map a page!")
+                .flush();
+        }
+    }
+    Some(VirtAddr::new(base))
+}
+
 pub fn map_page(
     mapper: &mut impl Mapper<Size4KiB>,
     virt_addr: u64,
@@ -143,6 +172,18 @@ pub fn alloc(
     }
 
     return alloc_pages(mapper, frame_allocator, num_bytes.div_ceil(4096).max(2));
+}
+
+pub fn alloc_user(
+    mapper: &mut impl Mapper<Size4KiB>,
+    frame_allocator: &mut impl FrameAllocator<Size4KiB>,
+    num_bytes: usize,
+) -> Option<VirtAddr> {
+    if num_bytes == 0 {
+        return None;
+    }
+
+    return alloc_pages_user(mapper, frame_allocator, num_bytes.div_ceil(4096).max(2));
 }
 
 pub fn free(

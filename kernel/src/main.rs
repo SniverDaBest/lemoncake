@@ -18,6 +18,7 @@
  * A better bootloader (Limine)
  * A C/C++ library (like glibc or musl)
  * Support external drivers
+ * Possible Raspberry Pi port..?
  */
 
 extern crate alloc;

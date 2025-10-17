@@ -451,7 +451,7 @@ impl TTY {
     pub fn yay(&mut self, color: Option<(u8, u8, u8, u8)>) {
         let (x, y) = self.get_cur_loc();
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-            fb.draw_smiley(x, y, color.unwrap_or(self.fg_color));
+            fb.draw_smiley(x, y + unsafe { FONT_HEIGHT } / 4, color.unwrap_or(self.fg_color));
             self.cursor_x += 1;
             if self.cursor_x >= self.width {
                 self.cursor_x = 0;
@@ -466,7 +466,7 @@ impl TTY {
     pub fn sad(&mut self, color: Option<(u8, u8, u8, u8)>) {
         let (x, y) = self.get_cur_loc();
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-            fb.draw_sad_face(x, y, color.unwrap_or(self.fg_color));
+            fb.draw_sad_face(x, y + unsafe { FONT_HEIGHT } / 4, color.unwrap_or(self.fg_color));
             self.cursor_x += 1;
             if self.cursor_x >= self.width {
                 self.cursor_x = 0;
