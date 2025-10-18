@@ -150,10 +150,8 @@ impl Framebuffer {
             let base_index = row * row_sd;
             for col in 0..mw {
                 let pixel_index = base_index + col;
-                if let Some(&(r, g, b, a)) = bitmap.get(pixel_index) {
-                    if a != 0 {
-                        self.put_pixel(x + col, y + row, (r, g, b));
-                    }
+                if let Some(&(r, g, b, a)) = bitmap.get(pixel_index) && a != 0{
+                    self.put_pixel(x + col, y + row, (r, g, b));
                 }
             }
         }

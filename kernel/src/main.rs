@@ -51,15 +51,13 @@ use core::arch::asm;
 use core::error;
 use core::fmt::{Arguments, Write};
 use display::{Framebuffer, TTY};
-use elf::load_elf;
+use elf::Process;
 use keyboard::ScancodeStream;
 use memory::BootInfoFrameAllocator;
 use spin::Mutex;
 use spinning_top::Spinlock;
-use syscall::jump_to_usermode;
 use x86_64::{
     PhysAddr, VirtAddr,
-    structures::paging::{FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB},
 };
 
 pub static BOOTLOADER_CONFIG: BootloaderConfig = {
@@ -242,58 +240,10 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
         }
     }
 
-    info!("Loading init program...");
-    let e = load_elf(
-        include_bytes!("../../init"),
-        &mut mapper,
-        &mut frame_allocator,
-    )
-    .expect("Unable to get init program address!");
-
-    info!("Mapping the user stack...");
-    map_user_stack(&mut mapper, &mut frame_allocator);
-
-    info!("Switching to usermode at {:#x}...", e);
-    unsafe {
-        jump_to_usermode(e.as_u64(), 0x7FFF_FFFF_E000);
-    }
-}
-
-pub fn map_user_stack(
-    mapper: &mut impl Mapper<Size4KiB>,
-    frame_allocator: &mut impl FrameAllocator<Size4KiB>,
-) {
-    let user_stack_start = VirtAddr::new(0x7FFF_FFF0_0000);
-    let user_stack_end = VirtAddr::new(0x7FFF_FFFF_E000);
-
-    info!(
-        "User stack range: {:?} - {:?}",
-        user_stack_start, user_stack_end
-    );
-
-    let page_range = Page::range_inclusive(
-        Page::containing_address(user_stack_start),
-        Page::containing_address(user_stack_end),
-    );
-
-    for page in page_range {
-        let frame = frame_allocator
-            .allocate_frame()
-            .expect("Unable to allocate frame for user stack!");
-        unsafe {
-            mapper
-                .map_to(
-                    page,
-                    frame,
-                    PageTableFlags::PRESENT
-                        | PageTableFlags::WRITABLE
-                        | PageTableFlags::USER_ACCESSIBLE,
-                    frame_allocator,
-                )
-                .expect("Unable to map the user stack!")
-                .flush();
-        }
-    }
+    info!("Switching to usermode...");
+    unsafe { Process::new(include_bytes!("../../init")).switch(10, &mut mapper, &mut frame_allocator); };
+    
+    panic!("Error while switching to usermode!");
 }
 
 pub fn hlt_loop() -> ! {

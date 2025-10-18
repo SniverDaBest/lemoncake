@@ -114,7 +114,7 @@ pub fn draw_char_psf(x: usize, y: usize, ch: char, color: (u8, u8, u8, u8)) {
     }
 
     let bpg = font.bytes_per_glyph;
-    let start = glyph_index.checked_mul(bpg).unwrap_or(usize::MAX);
+    let start = glyph_index.saturating_mul(bpg);
     if start == usize::MAX || start + bpg > font.glyphs.len() {
         return;
     }
@@ -126,7 +126,7 @@ pub fn draw_char_psf(x: usize, y: usize, ch: char, color: (u8, u8, u8, u8)) {
 
     for row in 0..font.height {
         let bits_in_row = font.width;
-        let row_byte_offset = row * ((bits_in_row + 7) / 8);
+        let row_byte_offset = row * bits_in_row.div_ceil(8);
         for bit in 0..bits_in_row {
             let byte_idx = row_byte_offset + (bit / 8);
             let pixel_on = if byte_idx < glyph.len() {
