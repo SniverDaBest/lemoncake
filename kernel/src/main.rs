@@ -13,6 +13,7 @@
  * A not shitty executable loader
  * VirtIO Drivers
  * IDE
+ * Fix the disaster at display.rs@L224
  * Shutting down the system through ACPI
  * Different fonts
  * A better bootloader (Limine)
@@ -82,8 +83,8 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     *FRAMEBUFFER.lock() = Some(fb);
     *TTY.lock() = Some(TTY::new());
 
-    if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-        fb.clear_screen((30, 30, 46));
+    if let Some(tty) = TTY.lock().as_mut() {
+        tty.clear_tty();
     }
 
     println!("\x1b[0m{}", include_str!("../../assets/ascii_art.txt"));
@@ -398,7 +399,7 @@ macro_rules! nftodo {
         $crate::all_println!(
             "\x1b[35m[TODO ]:\x1b[0m {}",
             format_args!($($arg)*)
-        );
+        )
     };
 }
 
@@ -406,7 +407,7 @@ macro_rules! nftodo {
 macro_rules! sad {
     () => {
         if let Some(tty) = $crate::TTY.lock().as_mut() {
-            tty.sad(Some((243, 139, 168, 255)));
+            tty.sad(Some(crate::display::RED));
         }
     };
 }
@@ -415,7 +416,7 @@ macro_rules! sad {
 macro_rules! yay {
     () => {
         if let Some(tty) = $crate::TTY.lock().as_mut() {
-            tty.yay(Some((166, 227, 161, 255)));
+            tty.yay(Some(crate::display::GREEN));
         }
     };
 }

@@ -54,7 +54,8 @@ version = "0.4.0"
 default-features = false
 
 [features]
-default = ["serial-faces", "status-faces"]
+default = ["serial-faces", "status-faces", "catppuccin-colorscheme"]
 serial-faces = []
 status-faces = []
 clear-on-scroll = []
+catppuccin-colorscheme = []

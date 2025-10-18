@@ -221,6 +221,44 @@ static mut TTY_BUFFER: [Cell; 130 * 50] = [Cell {
     color: (255, 255, 255, 255),
 }; 130 * 50];
 
+#[cfg(feature = "catppuccin-colorscheme")]
+pub const BACKGROUND: (u8, u8, u8) = (30, 30, 46);
+#[cfg(feature = "catppuccin-colorscheme")]
+pub const WHITE: (u8, u8, u8, u8) = (205, 214, 244, 255);
+#[cfg(feature = "catppuccin-colorscheme")]
+pub const BLACK: (u8, u8, u8, u8) = (17, 17, 27, 255);
+#[cfg(feature = "catppuccin-colorscheme")]
+pub const RED: (u8, u8, u8, u8) = (243, 139, 168, 255);
+#[cfg(feature = "catppuccin-colorscheme")]
+pub const GREEN: (u8, u8, u8, u8) = (166, 227, 161, 255);
+#[cfg(feature = "catppuccin-colorscheme")]
+pub const YELLOW: (u8, u8, u8, u8) = (249, 226, 175, 255);
+#[cfg(feature = "catppuccin-colorscheme")]
+pub const BLUE: (u8, u8, u8, u8) = (137, 180, 250, 255);
+#[cfg(feature = "catppuccin-colorscheme")]
+pub const MAGENTA: (u8, u8, u8, u8) = (203, 166, 247, 255);
+#[cfg(feature = "catppuccin-colorscheme")]
+pub const CYAN: (u8, u8, u8, u8) = (0, 170, 170, 255);
+
+#[cfg(not(feature = "catppuccin-colorscheme"))]
+pub const BACKGROUND: (u8, u8, u8) = (0, 0, 0);
+#[cfg(not(feature = "catppuccin-colorscheme"))]
+pub const WHITE: (u8, u8, u8, u8) = (255, 255, 255, 255);
+#[cfg(not(feature = "catppuccin-colorscheme"))]
+pub const BLACK: (u8, u8, u8, u8) = (0, 0, 0, 255);
+#[cfg(not(feature = "catppuccin-colorscheme"))]
+pub const RED: (u8, u8, u8, u8) = (255, 0, 0, 255);
+#[cfg(not(feature = "catppuccin-colorscheme"))]
+pub const GREEN: (u8, u8, u8, u8) = (0, 255, 0, 255);
+#[cfg(not(feature = "catppuccin-colorscheme"))]
+pub const YELLOW: (u8, u8, u8, u8) = (255, 255, 0, 255);
+#[cfg(not(feature = "catppuccin-colorscheme"))]
+pub const BLUE: (u8, u8, u8, u8) = (0, 0, 255, 255);
+#[cfg(not(feature = "catppuccin-colorscheme"))]
+pub const MAGENTA: (u8, u8, u8, u8) = (255, 0, 255, 255);
+#[cfg(not(feature = "catppuccin-colorscheme"))]
+pub const CYAN: (u8, u8, u8, u8) = (0, 255, 255, 255);
+
 pub struct TTY {
     width: usize,
     height: usize,
@@ -275,7 +313,7 @@ impl TTY {
 
     pub fn clear_tty(&mut self) {
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-            fb.clear_screen((30, 30, 46));
+            fb.clear_screen(BACKGROUND);
         }
 
         for i in 0..self.text_buf.len() {
@@ -303,7 +341,7 @@ impl TTY {
         }
 
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-            fb.clear_screen((30, 30, 46));
+            fb.clear_screen(BACKGROUND);
         }
 
         for y in 0..self.height {
@@ -359,7 +397,7 @@ impl TTY {
         }
 
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-            fb.clear_screen((30, 30, 46));
+            fb.clear_screen(BACKGROUND);
         }
 
         for x in 0..self.width {
@@ -395,19 +433,18 @@ impl TTY {
                         let code = core::str::from_utf8(&num_buf[..num_len]).unwrap_or("0");
                         let code = code.parse::<u8>().unwrap_or(0);
                         self.fg_color = match code {
-                            30 => (0, 0, 0, 255),       // Black
-                            31 => (243, 139, 168, 255), // Red
-                            32 => (166, 227, 161, 255), // Green
-                            33 => (249, 226, 175, 255), // Yellow
-                            34 => (137, 180, 250, 255), // Blue
-                            35 => (203, 166, 247, 255), // Magenta
-                            36 => (0, 170, 170, 255),   // Cyan
-                            37 => (255, 255, 255, 255), // White
-                            0 => (205, 214, 244, 255),  // Reset
+                            30 => BLACK,    // Black
+                            31 => RED, // Red
+                            32 => GREEN, // Green
+                            33 => YELLOW, // Yellow
+                            34 => BLUE, // Blue
+                            35 => MAGENTA, // Magenta
+                            36 => CYAN,   // Cyan
+                            0 | 37 => WHITE,  // White/Reset
                             _ => self.fg_color,
                         };
                     } else {
-                        self.fg_color = (205, 214, 244, 255);
+                        self.fg_color = WHITE;
                     }
                     continue;
                 }
