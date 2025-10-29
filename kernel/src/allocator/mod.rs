@@ -116,7 +116,7 @@ pub fn alloc_pages_user(
     frame_allocator: &mut impl FrameAllocator<Size4KiB>,
     num_pages: usize,
 ) -> Option<VirtAddr> {
-    static mut NEXT_VIRT: u64 = 0xffff_9000_0000_0000;
+    static mut NEXT_VIRT: u64 = 0xffff_ffff_9000_0000;
     let base;
     unsafe {
         base = NEXT_VIRT;

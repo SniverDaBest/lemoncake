@@ -45,7 +45,6 @@ pub mod syscall;
 
 use acpi::init_pcie_from_acpi;
 use alloc::sync::Arc;
-use alloc::vec::Vec;
 use bootloader_api::config::{BootloaderConfig, Mapping};
 use bootloader_api::{BootInfo, entry_point};
 use core::arch::asm;
@@ -57,9 +56,9 @@ use keyboard::ScancodeStream;
 use memory::BootInfoFrameAllocator;
 use spin::Mutex;
 use spinning_top::Spinlock;
-use x86_64::{
-    PhysAddr, VirtAddr,
-};
+use x86_64::{PhysAddr, VirtAddr};
+
+use crate::drivers::nvme;
 
 pub static BOOTLOADER_CONFIG: BootloaderConfig = {
     let mut config = BootloaderConfig::new_default();
@@ -195,55 +194,22 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     #[allow(unused)]
     let scancodes = Arc::new(Mutex::new(ScancodeStream::new()));
 
-    info!("Finding IDE devices...");
-    let mut ide_devs = Vec::new();
-    for d in devs {
-        if d.class_code == 0x1 && d.subclass == 0x1 {
-            unsafe { d.write_config_u8(0x09, d.read_config_u8(0x09) | 0x05) };
-            match d.prog_if() {
-                0x5 | 0xF => ide_devs.push(d),
-
-                0x85 | 0x8F => {
-                    ide_devs.push(d);
-                    unsafe {
-                        d.enable_bus_master();
-                    }
-                }
-
-                0x0 | 0xA => {
-                    error!(
-                        "Device is unsupported, due to it being ISA compat mode only! (no bus mastering)"
-                    );
-                }
-
-                0x80 | 0x8A => {
-                    error!(
-                        "Device is unsupported, due to it being ISA compat mode only! (w/ bus mastering)"
-                    );
-                }
-
-                u => {
-                    warning!("Device has unknown prog if {:#x}! Assuming okay...", u);
-                    ide_devs.push(d);
-                }
-            }
-        }
-    }
-
-    info!("Found {} IDE devices!", ide_devs.len());
-
-    if !ide_devs.is_empty() {
-        info!("Initializing IDE devices...");
-        for d in ide_devs {
-            unsafe {
-                drivers::ide::init_ide(d, &mut mapper, &mut frame_allocator);
+    info!("Initializing NVMe devices...");
+    unsafe {
+        match nvme::nvme_init(&mut mapper, &mut frame_allocator) {
+            Ok(_) => {}
+            Err(e) => {
+                error!("Failed initializing NVMe devices! Error: {:?}", e);
             }
         }
     }
 
     info!("Switching to usermode...");
-    unsafe { Process::new(include_bytes!("../../init")).switch(10, &mut mapper, &mut frame_allocator); };
-    
+    serial_println!("Don't expect much more output here!");
+    unsafe {
+        Process::new(include_bytes!("../../init")).switch(10, &mut mapper, &mut frame_allocator);
+    };
+
     panic!("Error while switching to usermode!");
 }
 

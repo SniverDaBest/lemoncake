@@ -150,7 +150,9 @@ impl Framebuffer {
             let base_index = row * row_sd;
             for col in 0..mw {
                 let pixel_index = base_index + col;
-                if let Some(&(r, g, b, a)) = bitmap.get(pixel_index) && a != 0{
+                if let Some(&(r, g, b, a)) = bitmap.get(pixel_index)
+                    && a != 0
+                {
                     self.put_pixel(x + col, y + row, (r, g, b));
                 }
             }
@@ -433,14 +435,14 @@ impl TTY {
                         let code = core::str::from_utf8(&num_buf[..num_len]).unwrap_or("0");
                         let code = code.parse::<u8>().unwrap_or(0);
                         self.fg_color = match code {
-                            30 => BLACK,    // Black
-                            31 => RED, // Red
-                            32 => GREEN, // Green
-                            33 => YELLOW, // Yellow
-                            34 => BLUE, // Blue
-                            35 => MAGENTA, // Magenta
-                            36 => CYAN,   // Cyan
-                            0 | 37 => WHITE,  // White/Reset
+                            30 => BLACK,     // Black
+                            31 => RED,       // Red
+                            32 => GREEN,     // Green
+                            33 => YELLOW,    // Yellow
+                            34 => BLUE,      // Blue
+                            35 => MAGENTA,   // Magenta
+                            36 => CYAN,      // Cyan
+                            0 | 37 => WHITE, // White/Reset
                             _ => self.fg_color,
                         };
                     } else {
@@ -486,7 +488,11 @@ impl TTY {
     pub fn yay(&mut self, color: Option<(u8, u8, u8, u8)>) {
         let (x, y) = self.get_cur_loc();
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-            fb.draw_smiley(x, y + unsafe { FONT_HEIGHT } / 4, color.unwrap_or(self.fg_color));
+            fb.draw_smiley(
+                x,
+                y + unsafe { FONT_HEIGHT } / 4,
+                color.unwrap_or(self.fg_color),
+            );
             self.cursor_x += 1;
             if self.cursor_x >= self.width {
                 self.cursor_x = 0;
@@ -501,7 +507,11 @@ impl TTY {
     pub fn sad(&mut self, color: Option<(u8, u8, u8, u8)>) {
         let (x, y) = self.get_cur_loc();
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-            fb.draw_sad_face(x, y + unsafe { FONT_HEIGHT } / 4, color.unwrap_or(self.fg_color));
+            fb.draw_sad_face(
+                x,
+                y + unsafe { FONT_HEIGHT } / 4,
+                color.unwrap_or(self.fg_color),
+            );
             self.cursor_x += 1;
             if self.cursor_x >= self.width {
                 self.cursor_x = 0;
