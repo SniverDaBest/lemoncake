@@ -24,6 +24,12 @@ pub enum ProcInitError {
     InvalidElf,
 }
 
+#[derive(Debug)]
+pub enum ProcSwitchError {
+    AllocationError,
+    InitError,
+}
+
 impl fmt::Display for ProcInitError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
@@ -119,13 +125,13 @@ impl Process {
         pages: usize,
         mapper: &mut impl Mapper<Size4KiB>,
         frame_allocator: &mut impl FrameAllocator<Size4KiB>,
-    ) {
+    ) -> Result<(), ProcSwitchError> {
         if self.entrypoint.is_none() {
             match self.init(mapper, frame_allocator) {
                 Ok(_) => {}
                 Err(e) => {
                     error!("(ELF) Unable to initialize executable! Error: {}", e);
-                    return;
+                    return Err(ProcSwitchError::InitError);
                 }
             };
         }
@@ -135,7 +141,7 @@ impl Process {
                 Some(s) => Some(s.as_u64()),
                 None => {
                     error!("(ELF) Unable to allocate stack for executable!");
-                    return;
+                    return Err(ProcSwitchError::AllocationError);
                 }
             };
         }

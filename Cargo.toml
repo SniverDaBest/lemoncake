@@ -7,9 +7,11 @@ edition = "2024"
 path = "kernel"
 artifact = "bin"
 target = "x86_64-unknown-none"
+#default-features = false
+#features = ["status-faces", "serial-faces"]
 
 [build-dependencies]
-bootloader = "0.11.10"
+bootloader = "0.11.12"
 
 [dependencies]
 ovmf-prebuilt = "0.1.0-alpha.1"

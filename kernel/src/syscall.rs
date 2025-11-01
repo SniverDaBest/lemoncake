@@ -33,6 +33,12 @@ pub unsafe fn syscall_handler(
     r9: usize,
 ) -> usize {
     match rax {
+        0 => {
+            let filename = str::from_raw_parts(rdi as *const u8, rsi);
+
+            return 0;
+        }
+
         1 => {
             if rdx == 0 || rdx > MAX_PRINT || rsi == 0 {
                 error!("(SYSCALL) Bad print args! (Length {} at {:#x})", rdx, rsi);
@@ -54,13 +60,16 @@ pub unsafe fn syscall_handler(
             }
             return rdx;
         }
+
         2 => {
             panic!("{}", str::from_raw_parts(rdi as *const u8, rsi));
         }
+
         3 => {
             Sleep::ms(rdi as u64);
             return 0;
         }
+
         4 => {
             for i in 0..25 {
                 let r = rdrand();
@@ -72,6 +81,7 @@ pub unsafe fn syscall_handler(
             }
             return usize::MAX;
         }
+
         5 => {
             let istr_fmt = format!("{}", rdx);
             let istr = istr_fmt.as_bytes();
@@ -86,6 +96,7 @@ pub unsafe fn syscall_handler(
 
             return to_write;
         }
+
         6 => match rdi {
             1 => {
                 yay!();
@@ -97,6 +108,17 @@ pub unsafe fn syscall_handler(
             }
             _ => return usize::MAX,
         },
+
+        7 => {
+            nftodo!("(SYSCALL) Syscall 7 (listdir)");
+            return 0;
+        }
+
+        8 => {
+            nftodo!("(SYSCALL) Syscall 8 (filesize)");
+            return 0;
+        }
+
         i => {
             error!("(SYSCALL) Invalid syscall number {}!", i);
             return usize::MAX;

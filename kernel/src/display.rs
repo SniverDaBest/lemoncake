@@ -19,60 +19,69 @@ impl Framebuffer {
         let pixel_index = y * self.fb.info().stride + x;
         let byte_offset = pixel_index * self.fb.info().bytes_per_pixel;
 
-        match self.fb.info().pixel_format {
+        let fb = &mut self.fb;
+        let px_fmt = fb.info().pixel_format;
+        let buf = fb.buffer_mut();
+
+        match px_fmt {
             PixelFormat::Rgb => {
-                self.fb.buffer_mut()[byte_offset] = color.0;
-                self.fb.buffer_mut()[byte_offset + 1] = color.1;
-                self.fb.buffer_mut()[byte_offset + 2] = color.2;
+                buf[byte_offset] = color.0;
+                buf[byte_offset + 1] = color.1;
+                buf[byte_offset + 2] = color.2;
             }
             PixelFormat::Bgr => {
-                self.fb.buffer_mut()[byte_offset] = color.2;
-                self.fb.buffer_mut()[byte_offset + 1] = color.1;
-                self.fb.buffer_mut()[byte_offset + 2] = color.0;
+                buf[byte_offset] = color.2;
+                buf[byte_offset + 1] = color.1;
+                buf[byte_offset + 2] = color.0;
             }
             PixelFormat::U8 => {
-                self.fb.buffer_mut()[byte_offset] = color.0;
+                buf[byte_offset] = color.0;
             }
             _ => {}
         }
     }
 
     pub fn clear_screen(&mut self, color: (u8, u8, u8)) {
-        let width = self.fb.info().width;
-        let height = self.fb.info().height;
+        let info = self.fb.info();
+        let width = info.width;
+        let height = info.height;
+        let px_fmt = info.pixel_format;
+        let stride = info.stride;
+        let bpp = info.bytes_per_pixel;
+        let buf = self.fb.buffer_mut();
 
-        match self.fb.info().pixel_format {
+        match px_fmt {
             PixelFormat::Rgb => {
                 for y in 0..height {
                     for x in 0..width {
-                        let pixel_index = y * self.fb.info().stride + x;
-                        let byte_offset = pixel_index * self.fb.info().bytes_per_pixel;
+                        let pixel_index = y * stride + x;
+                        let byte_offset = pixel_index * bpp;
 
-                        self.fb.buffer_mut()[byte_offset] = color.0;
-                        self.fb.buffer_mut()[byte_offset + 1] = color.1;
-                        self.fb.buffer_mut()[byte_offset + 2] = color.2;
+                        buf[byte_offset] = color.0;
+                        buf[byte_offset + 1] = color.1;
+                        buf[byte_offset + 2] = color.2;
                     }
                 }
             }
             PixelFormat::Bgr => {
                 for y in 0..height {
                     for x in 0..width {
-                        let pixel_index = y * self.fb.info().stride + x;
-                        let byte_offset = pixel_index * self.fb.info().bytes_per_pixel;
+                        let pixel_index = y * stride + x;
+                        let byte_offset = pixel_index * bpp;
 
-                        self.fb.buffer_mut()[byte_offset] = color.2;
-                        self.fb.buffer_mut()[byte_offset + 1] = color.1;
-                        self.fb.buffer_mut()[byte_offset + 2] = color.0;
+                        buf[byte_offset] = color.2;
+                        buf[byte_offset + 1] = color.1;
+                        buf[byte_offset + 2] = color.0;
                     }
                 }
             }
             PixelFormat::U8 => {
                 for y in 0..height {
                     for x in 0..width {
-                        let pixel_index = y * self.fb.info().stride + x;
-                        let byte_offset = pixel_index * self.fb.info().bytes_per_pixel;
+                        let pixel_index = y * stride + x;
+                        let byte_offset = pixel_index * bpp;
 
-                        self.fb.buffer_mut()[byte_offset] = (color.0 + color.1 + color.2) / 3;
+                        buf[byte_offset] = (color.0 + color.1 + color.2) / 3;
                     }
                 }
             }
@@ -88,36 +97,41 @@ impl Framebuffer {
         let x = x.min(self.fb.info().width - w);
         let y = y.min(self.fb.info().height - h);
 
-        match self.fb.info().pixel_format {
+        let info = self.fb.info();
+        let stride = info.stride;
+        let px_fmt = info.pixel_format;
+        let buf = self.fb.buffer_mut();
+
+        match px_fmt {
             PixelFormat::Rgb => {
                 for line_y in y..(y + h) {
-                    let start_idx = (line_y * self.fb.info().stride + x) * 3;
+                    let start_idx = (line_y * stride + x) * 3;
 
                     for i in 0..w {
-                        self.fb.buffer_mut()[start_idx + i * 3] = color.0;
-                        self.fb.buffer_mut()[start_idx + i * 3 + 1] = color.1;
-                        self.fb.buffer_mut()[start_idx + i * 3 + 2] = color.2;
+                        buf[start_idx + i * 3] = color.0;
+                        buf[start_idx + i * 3 + 1] = color.1;
+                        buf[start_idx + i * 3 + 2] = color.2;
                     }
                 }
             }
             PixelFormat::Bgr => {
                 for line_y in y..(y + h) {
-                    let start_idx = (line_y * self.fb.info().stride + x) * 3;
+                    let start_idx = (line_y * stride + x) * 3;
 
                     for i in 0..w {
-                        self.fb.buffer_mut()[start_idx + i * 3] = color.2;
-                        self.fb.buffer_mut()[start_idx + i * 3 + 1] = color.1;
-                        self.fb.buffer_mut()[start_idx + i * 3 + 2] = color.0;
+                        buf[start_idx + i * 3] = color.2;
+                        buf[start_idx + i * 3 + 1] = color.1;
+                        buf[start_idx + i * 3 + 2] = color.0;
                     }
                 }
             }
             PixelFormat::U8 => {
                 let gray = (color.0 + color.1 + color.2) / 3;
                 for line_y in y..(y + h) {
-                    let start_idx = line_y * self.fb.info().stride + x;
+                    let start_idx = line_y * stride + x;
 
                     for i in 0..w {
-                        self.fb.buffer_mut()[start_idx + i] = gray;
+                        buf[start_idx + i] = gray;
                     }
                 }
             }
@@ -314,8 +328,13 @@ impl TTY {
     }
 
     pub fn clear_tty(&mut self) {
+        #[cfg(feature = "catppuccin-colorscheme")]
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
             fb.clear_screen(BACKGROUND);
+        }
+        #[cfg(not(feature = "catppuccin-colorscheme"))]
+        if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
+            fb.fb.buffer_mut().fill(0);
         }
 
         for i in 0..self.text_buf.len() {
@@ -342,8 +361,13 @@ impl TTY {
             };
         }
 
+        #[cfg(feature = "catppuccin-colorscheme")]
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
             fb.clear_screen(BACKGROUND);
+        }
+        #[cfg(not(feature = "catppuccin-colorscheme"))]
+        if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
+            fb.fb.buffer_mut().fill(0);
         }
 
         for y in 0..self.height {
@@ -398,8 +422,13 @@ impl TTY {
             };
         }
 
+        #[cfg(feature = "catppuccin-colorscheme")]
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
             fb.clear_screen(BACKGROUND);
+        }
+        #[cfg(not(feature = "catppuccin-colorscheme"))]
+        if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
+            fb.fb.buffer_mut().fill(0);
         }
 
         for x in 0..self.width {
@@ -476,7 +505,16 @@ impl TTY {
                 }
 
                 #[cfg(feature = "clear-on-scroll")]
-                self.clear_tty();
+                {
+                    #[cfg(feature = "catppuccin-colorscheme")]
+                    if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
+                        fb.clear_screen(BACKGROUND);
+                    }
+                    #[cfg(not(feature = "catppuccin-colorscheme"))]
+                    if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
+                        fb.fb.buffer_mut().fill(0);
+                    }
+                }
             }
         }
     }

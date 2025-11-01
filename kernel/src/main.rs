@@ -44,21 +44,23 @@ pub mod sleep;
 pub mod syscall;
 
 use acpi::init_pcie_from_acpi;
-use alloc::sync::Arc;
+use alloc::{sync::Arc, boxed::Box};
 use bootloader_api::config::{BootloaderConfig, Mapping};
 use bootloader_api::{BootInfo, entry_point};
+use commandline::run_command_line;
 use core::arch::asm;
 use core::error;
 use core::fmt::{Arguments, Write};
 use display::{Framebuffer, TTY};
+use drivers::ustar::USTar;
 use elf::Process;
+use executor::*;
 use keyboard::ScancodeStream;
 use memory::BootInfoFrameAllocator;
 use spin::Mutex;
 use spinning_top::Spinlock;
+use x86_64::structures::paging::{FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB};
 use x86_64::{PhysAddr, VirtAddr};
-
-use crate::drivers::nvme;
 
 pub static BOOTLOADER_CONFIG: BootloaderConfig = {
     let mut config = BootloaderConfig::new_default();
@@ -73,6 +75,8 @@ entry_point!(kernel_main, config = &BOOTLOADER_CONFIG);
 
 pub static FRAMEBUFFER: Spinlock<Option<Framebuffer>> = Spinlock::new(None);
 pub static TTY: Spinlock<Option<TTY>> = Spinlock::new(None);
+
+pub static FS: Spinlock<Option<&'static mut USTar>> = Spinlock::new(None);
 
 fn kernel_main(info: &'static mut BootInfo) -> ! {
     serial_print!("\x1B[2J\x1B[1;1H");
@@ -147,7 +151,7 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     }
 
     info!("Scanning PCIe bus...");
-    let devs = pci::scan_pci_bus();
+    let _devs = pci::scan_pci_bus();
 
     info!("Initializing IDT & GDT...");
     interrupts::init_idt();
@@ -194,6 +198,7 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     #[allow(unused)]
     let scancodes = Arc::new(Mutex::new(ScancodeStream::new()));
 
+    /*
     info!("Initializing NVMe devices...");
     unsafe {
         match nvme::nvme_init(&mut mapper, &mut frame_allocator) {
@@ -203,14 +208,73 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
             }
         }
     }
+    */
 
-    info!("Switching to usermode...");
-    serial_println!("Don't expect much more output here!");
-    unsafe {
-        Process::new(include_bytes!("../../init")).switch(10, &mut mapper, &mut frame_allocator);
+    info!("Initializing ramdisk...");
+    let ramdisk_data = include_bytes!("../../hd.tar");
+    *FS.lock() = unsafe { init_ramdisk(&mut mapper, &mut frame_allocator, 50, ramdisk_data) };
+
+    info!("Getting init program...");
+    let init = if let Some(fs) = FS.lock().as_ref() {
+        let i = fs.read_file("init".as_bytes());
+        if i.is_none() { error!("Unable to read init program! Going to kernel shell..."); }
+        i
+    } else {
+        error!("Unable to get ramdisk! Going to kernel shell...");
+        None
     };
+    
+    match init {
+        Some(i) => {
+            info!("Switching to usermode...");
+            serial_println!("Don't expect much more output here!");
+            unsafe {
+                panic!(
+                    "Error while switching to usermode! Error: {:?}",
+                    Process::new(i.read_all()).switch(10, &mut mapper, &mut frame_allocator)
+                );
+            };
+        }
+        
+        None => {
+            let mut e = Executor::new();
+            e.spawn(Task::new(run_command_line(scancodes)));
+            e.run();
+        }
+    }
+}
 
-    panic!("Error while switching to usermode!");
+unsafe fn init_ramdisk<M: Mapper<Size4KiB>, F: FrameAllocator<Size4KiB>>(
+    mapper: &mut M,
+    frame_allocator: &mut F,
+    mib: usize,
+    ramdisk_data: &'static [u8],
+) -> Option<&'static mut USTar> {
+    let start = VirtAddr::new(0x5000_0000_0000);
+    let end = start + mib as u64 * 1024 * 1024;
+    let start_page = Page::containing_address(start);
+    let end_page = Page::containing_address(end);
+    for page in Page::range_inclusive(start_page, end_page) {
+        let frame = frame_allocator
+            .allocate_frame()
+            .expect("Unable to allocate a frame!");
+
+        mapper
+            .map_to(
+                page,
+                frame,
+                PageTableFlags::WRITABLE | PageTableFlags::PRESENT,
+                frame_allocator,
+            )
+            .expect("Unable to map a page for the ramdisk!")
+            .flush();
+    }
+
+    let rd = core::slice::from_raw_parts_mut(start.as_mut_ptr::<u8>(), ramdisk_data.len());
+    rd.copy_from_slice(ramdisk_data);
+
+    let ustar = drivers::ustar::USTar::new(rd);
+    return Some(Box::leak(Box::new(ustar)));
 }
 
 pub fn hlt_loop() -> ! {
@@ -412,7 +476,7 @@ fn panic_handler(_info: &core::panic::PanicInfo) -> ! {
     serial_print!("☹"); // this may not render in all terminals! disable the `serial-faces` feature to get rid of it.
 
     if let Some(tty) = TTY.lock().as_mut() {
-        tty.sad(Some((243, 139, 168, 255)));
+        tty.sad(Some(crate::display::RED));
     }
 
     loop {}
