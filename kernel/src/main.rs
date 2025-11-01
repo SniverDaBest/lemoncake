@@ -72,7 +72,7 @@ pub const HANDLER: acpi::Handler = acpi::Handler;
 
 pub static FRAMEBUFFER: Spinlock<Option<Framebuffer>> = Spinlock::new(None);
 pub static TTY: Spinlock<Option<TTY>> = Spinlock::new(None);
-pub static FS: Spinlock<Option<USTar>> = Spinlock::new(None);
+pub static FS: Spinlock<Option<&'static mut USTar>> = Spinlock::new(None);
 
 #[used]
 #[unsafe(link_section = ".requests")]
