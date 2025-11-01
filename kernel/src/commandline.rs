@@ -185,6 +185,63 @@ fn res(_registry: &CommandRegistry, _args: Vec<&str>) -> i32 {
     return 0;
 }
 
+fn ls(_registry: &CommandRegistry, _args: Vec<&str>) -> i32 {
+    let files: Vec<(String, usize)> = {
+        if let Some(fs) = crate::FS.lock().as_ref() {
+            let mut result = Vec::new();
+            let mut count = 0;
+            for file in fs.files() {
+                result.push((file.get_name().to_string(), file.get_size()));
+                count += 1;
+                if count > 1000 {
+                    break;
+                }
+            }
+            result
+        } else {
+            println!("Filesystem is not initialized!");
+            return 1;
+        }
+    };
+    
+    println!("Found {} files", files.len());
+    for (name, size) in files {
+        println!("{}: {} bytes", name, size);
+    }
+    
+    return 0;
+}
+
+fn cat(_registry: &CommandRegistry, args: Vec<&str>) -> i32 {
+    if args.len() != 1 {
+        println!("Usage: cat <filename>");
+        return 1;
+    }
+    
+    let content = {
+        if let Some(fs) = crate::FS.lock().as_ref() {
+            match fs.read_file(args[0].as_bytes()) {
+                Some(f) => Some(f.read_all().to_vec()),
+                None => None,
+            }
+        } else {
+            println!("Filesystem is not initialized!");
+            return 1;
+        }
+    };
+    
+    match content {
+        Some(data) => {
+            println!("{}", unsafe { str::from_utf8_unchecked(&data) });
+            return 0;
+        }
+        None => {
+            println!("Couldn't read file {}!", args[0]);
+            return 1;
+        }
+    }
+}
+
 fn init_command_registry() -> CommandRegistry {
     let license_cmd = Command::new(
         "license",
@@ -231,6 +288,18 @@ fn init_command_registry() -> CommandRegistry {
         "Displays the current resolution.",
         res,
     );
+    let ls_cmd = Command::new(
+        "ls",
+        vec!["listdir"],
+        "Lists all files in filesystem.",
+        ls,
+    );
+    let cat_cmd = Command::new(
+        "cat",
+        vec!["readfile"],
+        "Reads data from a file.",
+        cat,
+    );
 
     let mut reg = CommandRegistry::new();
     reg.push(license_cmd);
@@ -242,6 +311,8 @@ fn init_command_registry() -> CommandRegistry {
     reg.push(panic_cmd);
     reg.push(shutdown_cmd);
     reg.push(res_cmd);
+    reg.push(ls_cmd);
+    reg.push(cat_cmd);
     reg.push(help_cmd);
 
     return reg;

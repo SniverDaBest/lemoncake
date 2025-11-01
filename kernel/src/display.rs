@@ -75,6 +75,22 @@ impl Framebuffer {
                     *row_ptr.add(x) = pixel;
                 }
             }
+            
+            match self.get_pixel_format() {
+                PixelFormat::Bgr => {
+                    for y in 0..height {
+                        for x in 0..width {
+                            let pixel_index = y * stride + x;
+                            let byte_offset = pixel_index * bpp;
+    
+                            buf[byte_offset] = color.2;
+                            buf[byte_offset + 1] = color.1;
+                            buf[byte_offset + 2] = color.0;
+                        }
+                    }
+                }
+                _ => {}
+            }
         }
     }
 
@@ -102,6 +118,21 @@ impl Framebuffer {
                     *row_ptr.add(col) = pixel;
                 }
             }
+            
+            match self.get_pixel_format() {
+                PixelFormat::Bgr => {
+                    for line_y in y..(y + h) {
+                        let start_idx = (line_y * stride + x) * 3;
+    
+                        for i in 0..w {
+                            buf[start_idx + i * 3] = color.2;
+                            buf[start_idx + i * 3 + 1] = color.1;
+                            buf[start_idx + i * 3 + 2] = color.0;
+                        }
+                    }
+                }
+                _ => {}
+            }
         }
     }
 
@@ -117,14 +148,16 @@ impl Framebuffer {
             return;
         }
 
-        for row in 0..height {
-            for col in 0..width {
-                let pixel_index = row * width + col;
-                if pixel_index < bitmap.len() {
-                    let (r, g, b, a) = bitmap[pixel_index];
-                    if a != 0 {
-                        self.put_pixel(x + col, y + row, (r, g, b));
-                    }
+        let row_sd = width;
+
+        for row in 0..mh {
+            let base_index = row * row_sd;
+            for col in 0..mw {
+                let pixel_index = base_index + col;
+                if let Some(&(r, g, b, a)) = bitmap.get(pixel_index)
+                    && a != 0
+                {
+                    self.put_pixel(x + col, y + row, (r, g, b));
                 }
             }
         }
@@ -194,6 +227,44 @@ static mut TTY_BUFFER: [Cell; 130 * 50] = [Cell {
     color: (255, 255, 255, 255),
 }; 130 * 50];
 
+#[cfg(feature = "catppuccin-colorscheme")]
+pub const BACKGROUND: (u8, u8, u8) = (30, 30, 46);
+#[cfg(feature = "catppuccin-colorscheme")]
+pub const WHITE: (u8, u8, u8, u8) = (205, 214, 244, 255);
+#[cfg(feature = "catppuccin-colorscheme")]
+pub const BLACK: (u8, u8, u8, u8) = (17, 17, 27, 255);
+#[cfg(feature = "catppuccin-colorscheme")]
+pub const RED: (u8, u8, u8, u8) = (243, 139, 168, 255);
+#[cfg(feature = "catppuccin-colorscheme")]
+pub const GREEN: (u8, u8, u8, u8) = (166, 227, 161, 255);
+#[cfg(feature = "catppuccin-colorscheme")]
+pub const YELLOW: (u8, u8, u8, u8) = (249, 226, 175, 255);
+#[cfg(feature = "catppuccin-colorscheme")]
+pub const BLUE: (u8, u8, u8, u8) = (137, 180, 250, 255);
+#[cfg(feature = "catppuccin-colorscheme")]
+pub const MAGENTA: (u8, u8, u8, u8) = (203, 166, 247, 255);
+#[cfg(feature = "catppuccin-colorscheme")]
+pub const CYAN: (u8, u8, u8, u8) = (0, 170, 170, 255);
+
+#[cfg(not(feature = "catppuccin-colorscheme"))]
+pub const BACKGROUND: (u8, u8, u8) = (0, 0, 0);
+#[cfg(not(feature = "catppuccin-colorscheme"))]
+pub const WHITE: (u8, u8, u8, u8) = (255, 255, 255, 255);
+#[cfg(not(feature = "catppuccin-colorscheme"))]
+pub const BLACK: (u8, u8, u8, u8) = (0, 0, 0, 255);
+#[cfg(not(feature = "catppuccin-colorscheme"))]
+pub const RED: (u8, u8, u8, u8) = (255, 0, 0, 255);
+#[cfg(not(feature = "catppuccin-colorscheme"))]
+pub const GREEN: (u8, u8, u8, u8) = (0, 255, 0, 255);
+#[cfg(not(feature = "catppuccin-colorscheme"))]
+pub const YELLOW: (u8, u8, u8, u8) = (255, 255, 0, 255);
+#[cfg(not(feature = "catppuccin-colorscheme"))]
+pub const BLUE: (u8, u8, u8, u8) = (0, 0, 255, 255);
+#[cfg(not(feature = "catppuccin-colorscheme"))]
+pub const MAGENTA: (u8, u8, u8, u8) = (255, 0, 255, 255);
+#[cfg(not(feature = "catppuccin-colorscheme"))]
+pub const CYAN: (u8, u8, u8, u8) = (0, 255, 255, 255);
+
 pub struct TTY {
     width: usize,
     height: usize,
@@ -247,14 +318,13 @@ impl TTY {
     }
 
     pub fn clear_tty(&mut self) {
+        #[cfg(feature = "catppuccin-colorscheme")]
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-            fb.draw_rect(
-                0,
-                0,
-                self.width * 8,
-                self.height * unsafe { FONT_HEIGHT },
-                (30, 30, 46),
-            );
+            fb.clear_screen(BACKGROUND);
+        }
+        #[cfg(not(feature = "catppuccin-colorscheme"))]
+        if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
+            fb.fb.buffer_mut().fill(0);
         }
 
         for i in 0..self.text_buf.len() {
@@ -281,14 +351,13 @@ impl TTY {
             };
         }
 
+        #[cfg(feature = "catppuccin-colorscheme")]
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-            fb.draw_rect(
-                0,
-                0,
-                self.width * 8,
-                self.height * unsafe { FONT_HEIGHT },
-                (30, 30, 46),
-            );
+            fb.clear_screen(BACKGROUND);
+        }
+        #[cfg(not(feature = "catppuccin-colorscheme"))]
+        if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
+            fb.fb.buffer_mut().fill(0);
         }
 
         for y in 0..self.height {
@@ -343,14 +412,13 @@ impl TTY {
             };
         }
 
+        #[cfg(feature = "catppuccin-colorscheme")]
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-            fb.draw_rect(
-                0,
-                self.cursor_y * unsafe { FONT_HEIGHT },
-                self.width * 8,
-                8,
-                (30, 30, 46),
-            );
+            fb.clear_screen(BACKGROUND);
+        }
+        #[cfg(not(feature = "catppuccin-colorscheme"))]
+        if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
+            fb.fb.buffer_mut().fill(0);
         }
 
         for x in 0..self.width {
@@ -386,19 +454,18 @@ impl TTY {
                         let code = core::str::from_utf8(&num_buf[..num_len]).unwrap_or("0");
                         let code = code.parse::<u8>().unwrap_or(0);
                         self.fg_color = match code {
-                            30 => (0, 0, 0, 255),       // Black
-                            31 => (243, 139, 168, 255), // Red
-                            32 => (166, 227, 161, 255), // Green
-                            33 => (249, 226, 175, 255), // Yellow
-                            34 => (137, 180, 250, 255), // Blue
-                            35 => (203, 166, 247, 255), // Magenta
-                            36 => (0, 170, 170, 255),   // Cyan
-                            37 => (255, 255, 255, 255), // White
-                            0 => (205, 214, 244, 255),  // Reset
+                            30 => BLACK,     // Black
+                            31 => RED,       // Red
+                            32 => GREEN,     // Green
+                            33 => YELLOW,    // Yellow
+                            34 => BLUE,      // Blue
+                            35 => MAGENTA,   // Magenta
+                            36 => CYAN,      // Cyan
+                            0 | 37 => WHITE, // White/Reset
                             _ => self.fg_color,
                         };
                     } else {
-                        self.fg_color = (205, 214, 244, 255);
+                        self.fg_color = WHITE;
                     }
                     continue;
                 }
@@ -428,7 +495,16 @@ impl TTY {
                 }
 
                 #[cfg(feature = "clear-on-scroll")]
-                self.clear_tty();
+                {
+                    #[cfg(feature = "catppuccin-colorscheme")]
+                    if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
+                        fb.clear_screen(BACKGROUND);
+                    }
+                    #[cfg(not(feature = "catppuccin-colorscheme"))]
+                    if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
+                        fb.fb.buffer_mut().fill(0);
+                    }
+                }
             }
         }
     }
@@ -440,7 +516,11 @@ impl TTY {
     pub fn yay(&mut self, color: Option<(u8, u8, u8, u8)>) {
         let (x, y) = self.get_cur_loc();
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-            fb.draw_smiley(x, y, color.unwrap_or(self.fg_color));
+            fb.draw_smiley(
+                x,
+                y + unsafe { FONT_HEIGHT } / 4,
+                color.unwrap_or(self.fg_color),
+            );
             self.cursor_x += 1;
             if self.cursor_x >= self.width {
                 self.cursor_x = 0;
@@ -455,7 +535,11 @@ impl TTY {
     pub fn sad(&mut self, color: Option<(u8, u8, u8, u8)>) {
         let (x, y) = self.get_cur_loc();
         if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-            fb.draw_sad_face(x, y, color.unwrap_or(self.fg_color));
+            fb.draw_sad_face(
+                x,
+                y + unsafe { FONT_HEIGHT } / 4,
+                color.unwrap_or(self.fg_color),
+            );
             self.cursor_x += 1;
             if self.cursor_x >= self.width {
                 self.cursor_x = 0;

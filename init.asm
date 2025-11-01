@@ -1,12 +1,25 @@
 section .data
-msg db "Orange moss potato. Key pasta carrot?", 0xA ; what the hell was i thinking when i wrote this?
-                                                    ; i mean, it's funny, so i'm 100% keeping this for a while
-                                                    ; but i also kinda wanna know what was going through my head when i wrote this...
+msg db 0xA, "Successfully entered init program!", 0xA
 len equ $ - msg
+space db ' '
 
 section .text
 global _start
 _start:
+    mov rax, 6
+    mov rdi, 1
+    int 0x80
+    
+    mov rax, 1
+    mov rdi, 1
+    lea rsi, [rel space]
+    mov rdx, 1
+    int 0x80
+    
+    mov rax, 6
+    mov rdi, 2
+    int 0x80
+
     mov rax, 1
     mov rdi, 1
     lea rsi, [rel msg]

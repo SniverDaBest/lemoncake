@@ -13,10 +13,12 @@
  * A better bootloader (Limine) <- worked on in this branch!
  * VirtIO Drivers
  * IDE
+ * Fix the disaster at display.rs@L224
  * Shutting down the system through ACPI
  * Different fonts
  * A C/C++ library (like glibc or musl)
  * Support external drivers
+ * Possible Raspberry Pi port..?
  */
 
 extern crate alloc;
@@ -41,13 +43,15 @@ pub mod sleep;
 pub mod syscall;
 
 use acpi::init_pcie_from_acpi;
-use alloc::sync::Arc;
-use alloc::vec::Vec;
+use alloc::{sync::Arc, boxed::Box};
+use commandline::run_command_line;
 use core::arch::asm;
 use core::error;
 use core::fmt::{Arguments, Write};
 use display::{Framebuffer, TTY};
-use elf::load_elf;
+use drivers::ustar::USTar;
+use elf::Process;
+use executor::*;
 use keyboard::ScancodeStream;
 use limine::request::StackSizeRequest;
 use limine::{
@@ -60,18 +64,15 @@ use limine::{
 use memory::BootInfoFrameAllocator;
 use spin::Mutex;
 use spinning_top::Spinlock;
-use syscall::jump_to_usermode;
-use x86_64::structures::paging::PageSize;
-use x86_64::{
-    PhysAddr, VirtAddr,
-    structures::paging::{FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB},
-};
+use x86_64::structures::paging::{FrameAllocator, Mapper, Page, PageTableFlags, Size4KiB};
+use x86_64::{PhysAddr, VirtAddr};
 
 pub static mut PMO: u64 = 0;
 pub const HANDLER: acpi::Handler = acpi::Handler;
 
 pub static FRAMEBUFFER: Spinlock<Option<Framebuffer>> = Spinlock::new(None);
 pub static TTY: Spinlock<Option<TTY>> = Spinlock::new(None);
+pub static FS: Spinlock<Option<USTar>> = Spinlock::new(None);
 
 #[used]
 #[unsafe(link_section = ".requests")]
@@ -122,8 +123,8 @@ pub extern "C" fn kernel_main() -> ! {
     *FRAMEBUFFER.lock() = Some(fb);
     *TTY.lock() = Some(TTY::new());
 
-    if let Some(fb) = FRAMEBUFFER.lock().as_mut() {
-        fb.clear_screen((30, 30, 46));
+    if let Some(tty) = TTY.lock().as_mut() {
+        tty.clear_tty();
     }
 
     println!("\x1b[0m{}", include_str!("../../assets/ascii_art.txt"));
@@ -193,7 +194,7 @@ pub extern "C" fn kernel_main() -> ! {
     }
 
     info!("Scanning PCIe bus...");
-    let devs = pci::scan_pci_bus();
+    let _devs = pci::scan_pci_bus();
 
     info!("Initializing IDT & GDT...");
     interrupts::init_idt();
@@ -205,7 +206,6 @@ pub extern "C" fn kernel_main() -> ! {
 
     info!("Setting up PICS/APIC");
     if let ::acpi::InterruptModel::Apic(apic) = pi.interrupt_model {
-        info!("Using APIC!");
         let lapic = unsafe { apic::LocalApic::init(PhysAddr::new(apic.local_apic_address)) };
         let mut freq = 1_000_000;
         if let Some(cpuid) = apic::cpuid()
@@ -237,114 +237,87 @@ pub extern "C" fn kernel_main() -> ! {
     info!("Enabling interrupts...");
     x86_64::instructions::interrupts::enable();
 
-    info!("Finding IDE devices...");
-    let mut ide_devs = Vec::new();
-    for d in devs {
-        if d.class_code == 0x1 && d.subclass == 0x1 {
-            unsafe { d.write_config_u8(0x09, d.read_config_u8(0x09) | 0x05) };
-            match d.prog_if() {
-                0x5 | 0xF => ide_devs.push(d),
-
-                0x85 | 0x8F => {
-                    ide_devs.push(d);
-                    unsafe {
-                        d.enable_bus_master();
-                    }
-                }
-
-                0x0 | 0xA => {
-                    error!(
-                        "Device is unsupported, due to it being ISA compat mode only! (no bus mastering)"
-                    );
-                }
-
-                0x80 | 0x8A => {
-                    error!(
-                        "Device is unsupported, due to it being ISA compat mode only! (w/ bus mastering)"
-                    );
-                }
-
-                u => {
-                    warning!("Device has unknown prog if {:#x}! Assuming okay...", u);
-                    ide_devs.push(d);
-                }
-            }
-        }
-    }
-
-    info!("Found {} IDE devices!", ide_devs.len());
-
     info!("Initializing scancode queue...");
     #[allow(unused)]
     let scancodes = Arc::new(Mutex::new(ScancodeStream::new()));
 
-    if !ide_devs.is_empty() {
-        info!("Initializing IDE devices...");
-        for d in ide_devs {
-            unsafe {
-                drivers::ide::init_ide(d, &mut mapper, &mut frame_allocator);
+    /*
+    info!("Initializing NVMe devices...");
+    unsafe {
+        match nvme::nvme_init(&mut mapper, &mut frame_allocator) {
+            Ok(_) => {}
+            Err(e) => {
+                error!("Failed initializing NVMe devices! Error: {:?}", e);
             }
         }
     }
-
-    info!("Loading init program...");
-    let e = load_elf(
-        include_bytes!("../../init"),
-        &mut mapper,
-        &mut frame_allocator,
-    )
-    .expect("Unable to get init program address!");
-
-    info!("Mapping the user stack...");
-    map_user_stack(&mut mapper, &mut frame_allocator);
-
-    info!("Switching to usermode at {:#x}...", e);
-    unsafe {
-        jump_to_usermode(e.as_u64(), 0x7FFF_FFFF_E000);
-    }
-
-    /*
-    let mut e = Executor::new();
-    e.spawn(Task::new(run_command_line(scancodes)));
-    e.run();
     */
-}
 
-pub fn map_user_stack(
-    mapper: &mut impl Mapper<Size4KiB>,
-    frame_allocator: &mut impl FrameAllocator<Size4KiB>,
-) {
-    let user_stack_start = VirtAddr::new(0x7FFF_FFF0_0000);
-    let user_stack_end = VirtAddr::new(0x7FFF_FFFF_E000);
+    info!("Initializing ramdisk...");
+    let ramdisk_data = include_bytes!("../../hd.tar");
+    *FS.lock() = unsafe { init_ramdisk(&mut mapper, &mut frame_allocator, 50, ramdisk_data) };
 
-    info!(
-        "User stack range: {:?} - {:?}",
-        user_stack_start, user_stack_end
-    );
-
-    let page_range = Page::range_inclusive(
-        Page::containing_address(user_stack_start),
-        Page::containing_address(user_stack_end),
-    );
-
-    for page in page_range {
-        let frame = frame_allocator
-            .allocate_frame()
-            .expect("Unable to allocate frame for user stack!");
-        unsafe {
-            mapper
-                .map_to(
-                    page,
-                    frame,
-                    PageTableFlags::PRESENT
-                        | PageTableFlags::WRITABLE
-                        | PageTableFlags::USER_ACCESSIBLE,
-                    frame_allocator,
-                )
-                .expect("Unable to map the user stack!")
-                .flush();
+    info!("Getting init program...");
+    let init = if let Some(fs) = FS.lock().as_ref() {
+        let i = fs.read_file("init".as_bytes());
+        if i.is_none() { error!("Unable to read init program! Going to kernel shell..."); }
+        i
+    } else {
+        error!("Unable to get ramdisk! Going to kernel shell...");
+        None
+    };
+    
+    match init {
+        Some(i) => {
+            info!("Switching to usermode...");
+            serial_println!("Don't expect much more output here!");
+            unsafe {
+                panic!(
+                    "Error while switching to usermode! Error: {:?}",
+                    Process::new(i.read_all()).switch(10, &mut mapper, &mut frame_allocator)
+                );
+            };
+        }
+        
+        None => {
+            let mut e = Executor::new();
+            e.spawn(Task::new(run_command_line(scancodes)));
+            e.run();
         }
     }
+}
+
+unsafe fn init_ramdisk<M: Mapper<Size4KiB>, F: FrameAllocator<Size4KiB>>(
+    mapper: &mut M,
+    frame_allocator: &mut F,
+    mib: usize,
+    ramdisk_data: &'static [u8],
+) -> Option<&'static mut USTar> {
+    let start = VirtAddr::new(0x5000_0000_0000);
+    let end = start + mib as u64 * 1024 * 1024;
+    let start_page = Page::containing_address(start);
+    let end_page = Page::containing_address(end);
+    for page in Page::range_inclusive(start_page, end_page) {
+        let frame = frame_allocator
+            .allocate_frame()
+            .expect("Unable to allocate a frame!");
+
+        mapper
+            .map_to(
+                page,
+                frame,
+                PageTableFlags::WRITABLE | PageTableFlags::PRESENT,
+                frame_allocator,
+            )
+            .expect("Unable to map a page for the ramdisk!")
+            .flush();
+    }
+
+    let rd = core::slice::from_raw_parts_mut(start.as_mut_ptr::<u8>(), ramdisk_data.len());
+    rd.copy_from_slice(ramdisk_data);
+
+    let ustar = drivers::ustar::USTar::new(rd);
+    return Some(Box::leak(Box::new(ustar)));
 }
 
 pub fn hlt_loop() -> ! {
@@ -499,7 +472,7 @@ macro_rules! nftodo {
         $crate::all_println!(
             "\x1b[35m[TODO ]:\x1b[0m {}",
             format_args!($($arg)*)
-        );
+        )
     };
 }
 
@@ -507,7 +480,7 @@ macro_rules! nftodo {
 macro_rules! sad {
     () => {
         if let Some(tty) = $crate::TTY.lock().as_mut() {
-            tty.sad(Some((243, 139, 168, 255)));
+            tty.sad(Some(crate::display::RED));
         }
     };
 }
@@ -516,7 +489,7 @@ macro_rules! sad {
 macro_rules! yay {
     () => {
         if let Some(tty) = $crate::TTY.lock().as_mut() {
-            tty.yay(Some((166, 227, 161, 255)));
+            tty.yay(Some(crate::display::GREEN));
         }
     };
 }
@@ -546,7 +519,7 @@ fn panic_handler(_info: &core::panic::PanicInfo) -> ! {
     serial_print!("☹"); // this may not render in all terminals! disable the `serial-faces` feature to get rid of it.
 
     if let Some(tty) = TTY.lock().as_mut() {
-        tty.sad(Some((243, 139, 168, 255)));
+        tty.sad(Some(crate::display::RED));
     }
 
     loop {}
