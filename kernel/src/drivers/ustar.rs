@@ -34,7 +34,7 @@ impl USTarFile {
     pub fn get_size(&self) -> usize {
         return self.size;
     }
-    
+
     pub fn get_name(&self) -> &'static str {
         return self.filename;
     }
@@ -65,7 +65,6 @@ impl Iterator for USTarFileIterator {
         if self.ptr >= self.data.len() {
             return None;
         }
-        
 
         if self.ptr + HEADER_SIZE > self.data.len() {
             return None;
@@ -75,16 +74,16 @@ impl Iterator for USTarFileIterator {
             return None;
         }
 
-        let signature = &self.data
-            [self.ptr + USTAR_SIGNATURE_OFFSET..self.ptr + USTAR_SIGNATURE_OFFSET + 5];
-        
+        let signature =
+            &self.data[self.ptr + USTAR_SIGNATURE_OFFSET..self.ptr + USTAR_SIGNATURE_OFFSET + 5];
+
         if signature != b"ustar" {
             return None;
         }
 
-        let size_slice = self.data.get(
-            self.ptr + FILE_SIZE_OFFSET..self.ptr + FILE_SIZE_OFFSET + FILE_SIZE_LENGTH
-        )?;
+        let size_slice = self
+            .data
+            .get(self.ptr + FILE_SIZE_OFFSET..self.ptr + FILE_SIZE_OFFSET + FILE_SIZE_LENGTH)?;
         let filesize = oct2bin(size_slice);
 
         let name_field = &self.data[self.ptr..self.ptr + 100];
@@ -120,7 +119,7 @@ impl Iterator for USTarFileIterator {
                 return Some(USTarFile::new(name, file_data, filesize));
             }
         };
-        
+
         self.ptr = next_ptr;
 
         return Some(USTarFile::new(name, file_data, filesize));
@@ -138,54 +137,54 @@ impl USTar {
 
     pub fn read_file(&self, filename: &[u8]) -> Option<USTarFile> {
         let mut ptr = 0;
-    
+
         while ptr + HEADER_SIZE <= self.data.len() {
             let signature =
                 &self.data[ptr + USTAR_SIGNATURE_OFFSET..ptr + USTAR_SIGNATURE_OFFSET + 5];
             if signature != b"ustar" {
                 break;
             }
-    
+
             let size_slice = self
                 .data
                 .get(ptr + FILE_SIZE_OFFSET..ptr + FILE_SIZE_OFFSET + FILE_SIZE_LENGTH)?;
             let filesize = oct2bin(size_slice);
-    
+
             let name_field = &self.data[ptr..ptr + 100];
             let name_len = name_field.iter().position(|&b| b == 0).unwrap_or(100);
             let header_name = &name_field[..name_len];
-    
+
             if header_name == filename {
                 let data_start = ptr + HEADER_SIZE;
                 let data_end = data_start + filesize;
-    
+
                 if data_end <= self.data.len() {
                     let file_data = &self.data[data_start..data_end];
-                    
-                    let name = str::from_utf8(header_name)
-                        .expect("(USTAR) Unable to read filename!");
+
+                    let name =
+                        str::from_utf8(header_name).expect("(USTAR) Unable to read filename!");
                     return Some(USTarFile::new(name, file_data, filesize));
                 }
             }
-    
+
             let blocks_needed = if filesize == 0 {
                 0
             } else {
                 (filesize + BLOCK_SIZE - 1) / BLOCK_SIZE
             };
-    
+
             let next_ptr = ptr.checked_add((blocks_needed + 1) * BLOCK_SIZE)?;
-    
+
             if next_ptr > self.data.len() {
                 break;
             }
-    
+
             ptr = next_ptr;
         }
-    
+
         return None;
     }
-    
+
     pub fn files(&self) -> USTarFileIterator {
         return USTarFileIterator {
             data: self.data,

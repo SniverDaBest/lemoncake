@@ -54,6 +54,8 @@ fn main() {
     */
     cmd.arg("-device").arg("vmware-svga");
     cmd.arg("-machine").arg("q35");
+    cmd.arg("-net").arg("nic,model=rtl8139");
+    cmd.arg("-net").arg("user");
     cmd.arg("-cpu").arg("host");
 
     let mut child = cmd.spawn().unwrap();

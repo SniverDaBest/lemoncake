@@ -14,19 +14,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "aml"
-version = "0.16.4"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c4f8cba7d4260ea05671dda81029f6f718b54402a4ec926a0d9a41bdbb96b415"
-dependencies = [
- "bit_field",
- "bitvec",
- "byteorder",
- "log",
- "spinning_top 0.2.5",
-]
-
-[[package]]
 name = "anyhow"
 version = "1.0.99"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -316,10 +303,9 @@ dependencies = [
 
 [[package]]
 name = "kernel"
-version = "25.10.0"
+version = "25.11.0"
 dependencies = [
  "acpi",
- "aml",
  "bitfield",
  "bootloader_api",
  "conquer-once",

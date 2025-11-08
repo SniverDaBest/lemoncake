@@ -197,6 +197,10 @@ extern "x86-interrupt" fn ioapic_handler_9(_stack_frame: InterruptStackFrame) {
     }
 }
 extern "x86-interrupt" fn ioapic_handler_10(_stack_frame: InterruptStackFrame) {
+    if let Some(rtl8139) = crate::RTL8139.lock().as_mut() {
+        unsafe { rtl8139.handle_interrupt(); }
+    }
+    
     unsafe {
         crate::apic::LAPIC
             .get()

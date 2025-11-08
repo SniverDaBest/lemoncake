@@ -7,3 +7,6 @@
 
 /* Filesystems */
 pub mod ustar;
+
+/* Networking */
+pub mod rtl8139;

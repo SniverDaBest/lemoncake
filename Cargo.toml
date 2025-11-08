@@ -8,7 +8,7 @@ path = "kernel"
 artifact = "bin"
 target = "x86_64-unknown-none"
 #default-features = false
-#features = ["status-faces", "serial-faces"]
+#features = ["catppuccin-colorscheme", "serial-faces"]
 
 [build-dependencies]
 bootloader = "0.11.12"

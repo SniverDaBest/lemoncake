@@ -203,12 +203,12 @@ fn ls(_registry: &CommandRegistry, _args: Vec<&str>) -> i32 {
             return 1;
         }
     };
-    
+
     println!("Found {} files", files.len());
     for (name, size) in files {
         println!("{}: {} bytes", name, size);
     }
-    
+
     return 0;
 }
 
@@ -217,7 +217,7 @@ fn cat(_registry: &CommandRegistry, args: Vec<&str>) -> i32 {
         println!("Usage: cat <filename>");
         return 1;
     }
-    
+
     let content = {
         if let Some(fs) = crate::FS.lock().as_ref() {
             match fs.read_file(args[0].as_bytes()) {
@@ -229,7 +229,7 @@ fn cat(_registry: &CommandRegistry, args: Vec<&str>) -> i32 {
             return 1;
         }
     };
-    
+
     match content {
         Some(data) => {
             println!("{}", unsafe { str::from_utf8_unchecked(&data) });
@@ -288,18 +288,8 @@ fn init_command_registry() -> CommandRegistry {
         "Displays the current resolution.",
         res,
     );
-    let ls_cmd = Command::new(
-        "ls",
-        vec!["listdir"],
-        "Lists all files in filesystem.",
-        ls,
-    );
-    let cat_cmd = Command::new(
-        "cat",
-        vec!["readfile"],
-        "Reads data from a file.",
-        cat,
-    );
+    let ls_cmd = Command::new("ls", vec!["listdir"], "Lists all files in filesystem.", ls);
+    let cat_cmd = Command::new("cat", vec!["readfile"], "Reads data from a file.", cat);
 
     let mut reg = CommandRegistry::new();
     reg.push(license_cmd);

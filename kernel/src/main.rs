@@ -42,9 +42,10 @@ pub mod png;
 pub mod serial;
 pub mod sleep;
 pub mod syscall;
+pub mod logging;
 
 use acpi::init_pcie_from_acpi;
-use alloc::{sync::Arc, boxed::Box};
+use alloc::{boxed::Box, sync::Arc, vec::Vec};
 use bootloader_api::config::{BootloaderConfig, Mapping};
 use bootloader_api::{BootInfo, entry_point};
 use commandline::run_command_line;
@@ -75,7 +76,7 @@ entry_point!(kernel_main, config = &BOOTLOADER_CONFIG);
 
 pub static FRAMEBUFFER: Spinlock<Option<Framebuffer>> = Spinlock::new(None);
 pub static TTY: Spinlock<Option<TTY>> = Spinlock::new(None);
-
+pub static RTL8139: Spinlock<Option<drivers::rtl8139::Rtl8139>> = Spinlock::new(None);
 pub static FS: Spinlock<Option<&'static mut USTar>> = Spinlock::new(None);
 
 fn kernel_main(info: &'static mut BootInfo) -> ! {
@@ -151,7 +152,7 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     }
 
     info!("Scanning PCIe bus...");
-    let _devs = pci::scan_pci_bus();
+    let devs = pci::scan_pci_bus();
 
     info!("Initializing IDT & GDT...");
     interrupts::init_idt();
@@ -210,6 +211,17 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     }
     */
 
+    info!("Initializing network device(s)...");
+    let mut net_devs = Vec::new();
+
+    for dev in devs {
+        if dev.vendor_id == drivers::rtl8139::PCI_VENDOR_ID
+            && dev.device_id == drivers::rtl8139::PCI_DEVICE_ID
+        {
+            net_devs.push(unsafe { drivers::rtl8139::Rtl8139::init(dev, &mut mapper) });
+        }
+    }
+
     info!("Initializing ramdisk...");
     let ramdisk_data = include_bytes!("../../hd.tar");
     *FS.lock() = unsafe { init_ramdisk(&mut mapper, &mut frame_allocator, 50, ramdisk_data) };
@@ -217,13 +229,15 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
     info!("Getting init program...");
     let init = if let Some(fs) = FS.lock().as_ref() {
         let i = fs.read_file("init".as_bytes());
-        if i.is_none() { error!("Unable to read init program! Going to kernel shell..."); }
+        if i.is_none() {
+            error!("Unable to read init program! Going to kernel shell...");
+        }
         i
     } else {
         error!("Unable to get ramdisk! Going to kernel shell...");
         None
     };
-    
+
     match init {
         Some(i) => {
             info!("Switching to usermode...");
@@ -235,7 +249,7 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
                 );
             };
         }
-        
+
         None => {
             let mut e = Executor::new();
             e.spawn(Task::new(run_command_line(scancodes)));
@@ -298,142 +312,6 @@ pub unsafe fn rdrand() -> Option<u64> {
 }
 
 #[macro_export]
-macro_rules! print {
-    ($($arg:tt)*) => {
-        if let Some(t) = $crate::TTY.lock().as_mut() {
-            use core::fmt::Write;
-            let _ = write!(t, "{}", format_args!($($arg)*));
-        } else {
-            $crate::serial_println!("No TTY available!");
-        }
-    };
-}
-
-#[macro_export]
-macro_rules! println {
-    () => ($crate::print!("\n"));
-    ($fmt:expr) => ($crate::print!(concat!($fmt, "\n")));
-    ($fmt:expr, $($arg:tt)*) => ($crate::print!(
-        concat!($fmt, "\n"), $($arg)*));
-}
-
-#[doc(hidden)]
-pub fn _print(args: Arguments) {
-    x86_64::instructions::interrupts::without_interrupts(|| {
-        serial::SERIAL1
-            .lock()
-            .write_fmt(args)
-            .expect("Printing to serial failed");
-    });
-    if let Some(t) = TTY.lock().as_mut() {
-        let _ = write!(t, "{}", args);
-    }
-}
-
-#[macro_export]
-macro_rules! all_print {
-    ($($arg:tt)*) => {
-        $crate::_print(format_args!($($arg)*))
-    };
-}
-
-#[macro_export]
-macro_rules! all_println {
-    () => ($crate::all_print!("\n"));
-    ($fmt:expr) => ($crate::all_print!(concat!($fmt, "\n")));
-    ($fmt:expr, $($arg:tt)*) => ($crate::all_print!(
-        concat!($fmt, "\n"), $($arg)*));
-}
-
-#[macro_export]
-#[cfg(feature = "status-faces")]
-macro_rules! info {
-    ($($arg:tt)*) => {
-        $crate::all_println!(
-            "\x1b[34m(o_o) [INFO ]:\x1b[0m {}",
-            format_args!($($arg)*)
-        )
-    };
-}
-
-#[macro_export]
-#[cfg(not(feature = "status-faces"))]
-macro_rules! info {
-    ($($arg:tt)*) => {
-        $crate::all_println!(
-            "\x1b[34m[INFO ]:\x1b[0m {}",
-            format_args!($($arg)*)
-        )
-    };
-}
-
-#[macro_export]
-#[cfg(feature = "status-faces")]
-macro_rules! warning {
-    ($($arg:tt)*) => {
-        $crate::all_println!(
-            "\x1b[33m(0_0) [WARN ]:\x1b[0m {}",
-            format_args!($($arg)*)
-        )
-    };
-}
-
-#[macro_export]
-#[cfg(not(feature = "status-faces"))]
-macro_rules! warning {
-    ($($arg:tt)*) => {
-        $crate::all_println!(
-            "\x1b[33m[WARN ]:\x1b[0m {}",
-            format_args!($($arg)*)
-        )
-    };
-}
-
-#[macro_export]
-#[cfg(feature = "status-faces")]
-macro_rules! error {
-    ($($arg:tt)*) => {
-        $crate::all_println!(
-            "\x1b[31m(X_X) [ERROR]:\x1b[0m {}",
-            format_args!($($arg)*)
-        )
-    };
-}
-
-#[macro_export]
-#[cfg(not(feature = "status-faces"))]
-macro_rules! error {
-    ($($arg:tt)*) => {
-        $crate::all_println!(
-            "\x1b[31m[ERROR]:\x1b[0m {}",
-            format_args!($($arg)*)
-        )
-    };
-}
-
-#[macro_export]
-#[cfg(feature = "status-faces")]
-macro_rules! nftodo {
-    ($($arg:tt)*) => {
-        $crate::all_println!(
-            "\x1b[35m(-_-) [TODO ]:\x1b[0m {}",
-            format_args!($($arg)*)
-        )
-    };
-}
-
-#[macro_export]
-#[cfg(not(feature = "status-faces"))]
-macro_rules! nftodo {
-    ($($arg:tt)*) => {
-        $crate::all_println!(
-            "\x1b[35m[TODO ]:\x1b[0m {}",
-            format_args!($($arg)*)
-        )
-    };
-}
-
-#[macro_export]
 macro_rules! sad {
     () => {
         if let Some(tty) = $crate::TTY.lock().as_mut() {
@@ -451,7 +329,6 @@ macro_rules! yay {
     };
 }
 
-/// Clear the TTY
 #[macro_export]
 macro_rules! clear {
     () => {{
