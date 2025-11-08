@@ -9,7 +9,7 @@ Lemoncake is a small OS, that was originally called `lemonade`. However, I have 
 It's written in Rust, with a chance some code in other languages may be written eventually..\
 \
 Here's a picture of it running:
-[![](screenshot.png)
+![](screenshot.png)
 
 >[!TIP]
 > If you're having issues, try running the utility script.\
