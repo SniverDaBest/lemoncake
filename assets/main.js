@@ -17,7 +17,8 @@ footertext.id = "footertext";
 footertext.innerHTML = `Created by SniverDaBest :D
 <br>
 <a href="license">License</a>
-<a href="https://github.com/SniverDaBest/lemoncake">GitHub</a>`;
+<a href="https://github.com/SniverDaBest/lemoncake">GitHub</a>
+<a href="https://github.com/SniverDaBest/lemoncake/tree/gh-pages">GitHub (this site)</a>`;
 footer.appendChild(footertext);
 document.body.appendChild(footer);
 
@@ -45,6 +46,10 @@ function copied(tag) {
             link.innerText = "";
         }, 2000);
     }
+}
+
+function changeMode() {
+    alert("(-_-) [TODO ]: Implement switching from dark to light mode! (and vice versa)");
 }
 
 let changeErrorCount = 0;

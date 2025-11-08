@@ -7,7 +7,7 @@
 
 html,
 body {
-    background-color: #1e1e2e;
+    background-color: #eff1f5;
     margin: 0;
 }
 
@@ -18,7 +18,7 @@ body {
 }
 
 footer {
-    background-color: #181825;
+    background-color: #e6e9ef;
     margin-top: auto;
 }
 
@@ -34,21 +34,21 @@ span,
 dt,
 dd,
 button {
-    color: #cdd6f4;
+    color: #4c4f69;
     font-family: "JetBrainsMono NFM";
 }
 
 a {
-    color: #cba6f7;
+    color: #8839ef;
 }
 
 code {
-    background-color: #181825;
+    background-color: #e6e9ef;
     border-radius: 5px;
 }
 
 #lcktext {
-    color: #f9e2af;
+    color: #df8e1d;
     text-align: center;
     font-size: 48pt;
     font-weight: 700;
@@ -69,15 +69,15 @@ code {
     justify-content: center;
     gap: 5px;
     position: relative;
-    background-color: #181825;
+    background-color: #e6e9ef;
 }
 
-.lightdark-btn {
+.ribbon-btn {
     position: absolute;
     right: 0;
     top: 0;
     background: #00000000;
-    color: #cdd6f4;
+    color: #4c4f69;
     border: transparent;
     border-bottom-left-radius: 5px;
     border-bottom-right-radius: 5px;
@@ -98,7 +98,7 @@ code {
     text-align: center;
     padding-top: 5px;
     padding-bottom: 5px;
-    color: #a6adc8;
+    color: #6c6f85;
 }
 
 #textcontent {
@@ -130,53 +130,53 @@ code {
 }
 
 .error {
-    color: #f38ba8;
+    color: #d20f39;
 }
 
 .warning {
-    color: #f9e2af;
+    color: #df8e1d;
 }
 
 .info {
-    color: #89b4fa;
+    color: #1e66f5;
 }
 
 .todo {
-    color: #cba6f7;
+    color: #8839ef;
 }
 
 .srsly {
-    color: #fab387;
+    color: #fe640b;
 }
 
 .invis {
-    color: #1e1e2e;
+    color: #eff1f5;
 }
 
 #red {
-    color: #f38ba8;
+    color: #d20f39;
 }
 
 #mauve {
-    color: #cba6f7;
+    color: #8839ef;
 }
 
 #peach {
-    color: #fab387;
+    color: #fe640b;
 }
 
 #yellow {
-    color: #f9e2af;
+    color: #df8e1d;
 }
 
 #teal {
-    color: #94e2d5;
+    color: #179299;
 }
 
 #blue {
-    color: #89b4fa;
+    color: #1e66f5;
 }
 
 #o2 {
-    color: #9399b2;
+    color: #7c7f93;
 }

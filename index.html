@@ -13,6 +13,7 @@
     <div id="top">
         <img src="assets/logo.png" id="lcklogo" onclick="gohome();">
         <p id="lcktext" onclick="gohome();">Lemoncake</p>
+        <button class="lightdark-btn" onclick="changeMode();"></button>
     </div>
 
     <div id="maincontent">
@@ -82,16 +83,20 @@
                     <dt><span id="mauve"></span> clear-on-scroll</dt>
                     <dd><span id="peach"></span> Instead of scrolling down when there is too much text on the screen to fit, it will clear the entire TTY.</dd>
                     <dd><span id="peach"></span> <span id="blue">NOTE</span>: This feature is <b id="red">NOT</b> enabled by default!</dd>
-                    
+
                     <dt><span id="mauve"></span> catppuccin-colorscheme</dt>
                     <dd><span id="peach"></span> Enables the catppuccin color scheme. It looks pretty :)</dd>
+
+                    <dt><span id="mauve"></span> ascii-art-startup</dt>
+                    <dd><span id="peach"></span> Prints out ASCII art to the TTY on startup. Disabling this feature will make it not print the art, or embed the art into the kernel.</dd>
+
                 </dl>
             </p>
             <h2><a id="linkbugs" class="link" onclick="copied('linkbugs')"></a> Known bugs</h2>
             <p>
                 <dl>
                     <dt><span id="mauve"></span> TTY won't clear on real hardware.</dt>
-                    <dd><span id="peach"></span> For some reason, when testing on real hardware, the TTY didn't seem to clear when scrolling, or with the clear-on-scroll feature enabled.</dd> 
+                    <dd><span id="peach"></span> For some reason, when testing on real hardware, the TTY didn't seem to clear when scrolling, or with the clear-on-scroll feature enabled.</dd>
                 </dl>
             </p>
         </div>
