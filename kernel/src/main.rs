@@ -91,6 +91,7 @@ fn kernel_main(info: &'static mut BootInfo) -> ! {
         tty.clear_tty();
     }
 
+    #[cfg(feature = "ascii-art-startup")]
     println!("\x1b[0m{}", include_str!("../../assets/ascii_art.txt"));
 
     let pkg_ver = env!("CARGO_PKG_VERSION");
