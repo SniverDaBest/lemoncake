@@ -40,7 +40,7 @@ If you want, you could also use VirtualBox, VMWare, or maybe something else to e
 Contributions would by highly appreciated!
 
 # License
-Lemoncake uses the BSD 2-clause (simplified) license. Check `LICENSE` for the full license.
+Lemoncake uses the NON-AI BSD 2-clause (simplified) license. Check `LICENSE` for the full license.
 
 # Credits
 Lemoncake uses quite a few dependencies. Most are under MIT, some are a dual license with either MIT or Apache 2.0.\
